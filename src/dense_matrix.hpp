@@ -52,7 +52,7 @@ public:
 	~dense_matrix() = default;
 
 	/// sets matrix sizes and allocates memory
-	void init( size_t rows, size_t cols ) noexcept;
+	void init( size_t rows, size_t cols );
 	/// adds elements and throws exception if row / col is out of range
 	void set_element( T value, size_t row, size_t col );
 
@@ -107,7 +107,7 @@ dense_matrix< T >::dense_matrix( size_t rows, size_t cols )
 }
 
 template< typename T >
-void dense_matrix< T >::init( size_t rows, size_t cols ) noexcept
+void dense_matrix< T >::init( size_t rows, size_t cols )
 {
 	m_rows = rows;
 	m_cols = cols;
