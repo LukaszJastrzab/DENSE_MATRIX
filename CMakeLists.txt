@@ -24,6 +24,7 @@ enable_testing()
 
 add_executable( ${PROJECT_NAME}
     src/dense_matrix.hpp
+    external/utilities.cuh
     tests/functions.hpp
     tests/main.cpp
 )
@@ -38,6 +39,7 @@ target_link_libraries( ${PROJECT_NAME}
 target_include_directories( ${PROJECT_NAME}
     PRIVATE
     ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/external
     ${CMAKE_SOURCE_DIR}/tests
 )
 
