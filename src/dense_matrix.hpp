@@ -139,7 +139,7 @@ void dense_matrix< T >::QR_decomposition()
 
 	for( size_t step{ 0 }; step < max_steps; ++step )
 	{
-		T col_norm{ 0.0 };
+		double col_norm{ 0.0 };
 
 		// calcualte norm
 		// ==============
@@ -148,14 +148,13 @@ void dense_matrix< T >::QR_decomposition()
 			double abs_val = std::abs( m_matrix[ r ][ step ] );
 			col_norm += abs_val * abs_val;
 		}
-
 		col_norm = std::sqrt( col_norm );
 
 		// stabilization sign calculation
 		// ==============================
 		double alpha_abs = std::abs( m_matrix[ step ][ step ] );
 		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / alpha_abs : T{ -1 } );
-		T sign_norm = sign * col_norm;
+		T sign_norm = sign * T{ col_norm };
 
 		m_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
 
@@ -188,6 +187,8 @@ void dense_matrix< T >::QR_decomposition()
 				vTA[ c ] += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ c ];
 		}
 
+		// calculate (I-bvvT)A = A - b(v(vTA))
+		// ===================================
 		for( size_t c{ step + 1 }; c < m_cols; ++c )
 			m_matrix[ step ][ c ] -= m_betas[ step ] * m_v_firsts[ step ] * vTA[ c ];
 
