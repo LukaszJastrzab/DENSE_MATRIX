@@ -122,6 +122,8 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 template< typename T >
 void dense_matrix< T >::QR_decomposition()
 {
+	using real_t = real_type< T >::type;
+
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
 
@@ -154,7 +156,7 @@ void dense_matrix< T >::QR_decomposition()
 		// ==============================
 		double alpha_abs = std::abs( m_matrix[ step ][ step ] );
 		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / alpha_abs : T{ -1 } );
-		T sign_norm = sign * T{ col_norm };
+		T sign_norm = sign * T{ static_cast< real_t >( col_norm ) };
 
 		m_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
 
