@@ -26,14 +26,20 @@ TEST( non_singular_linear_equation_real_float, QR_decomposition_Householder )
 			A.set_element( generate_random< float >( 0.01, 100.0 ), row, col );
 	}
 
-	// make a copy for residual vector verification
-	// ============================================
+	// make a copy for residual vector verification - this part is not needed (its just for test)
+	// ==========================================================================================
 	auto A_ = A;
 
 	A.QR_decomposition();
 	A.solve_QR( x, b );
-	A_.count_residual_vector( x, b, r );
 
+	// check solution usign decomposed matrix...
+	// =========================================
+	A.count_residual_vector( x, b, r );
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
+
+	// or check using initial matrix (before decomposition) - just for test
+	A_.count_residual_vector( x, b, r );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 }
 
@@ -52,14 +58,20 @@ TEST( non_singular_linear_equation_real_double, QR_decomposition_Householder )
 			A.set_element( generate_random< double >( 0.0001, 10000.0 ), row, col );
 	}
 
-	// make a copy for residual vector verification
-	// ============================================
+	// make a copy for residual vector verification - this part is not needed (its just for test)
+	// ==========================================================================================
 	auto A_ = A;
 
 	A.QR_decomposition();
 	A.solve_QR( x, b );
-	A_.count_residual_vector( x, b, r );
 
+	// check solution usign decomposed matrix...
+	// =========================================
+	A.count_residual_vector( x, b, r );
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
+
+	// or check using initial matrix (before decomposition) - just for test
+	A_.count_residual_vector( x, b, r );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
 }
 
@@ -78,14 +90,20 @@ TEST( non_singular_linear_equation_complex_float, QR_decomposition_Householder )
 			A.set_element( generate_complex_random< float >( 0.01, 100.0 ), row, col );
 	}
 
-	// make a copy for residual vector verification
-	// ============================================
+	// make a copy for residual vector verification - this part is not needed (its just for test)
+	// ==========================================================================================
 	auto A_ = A;
 
 	A.QR_decomposition();
 	A.solve_QR( x, b );
-	A_.count_residual_vector( x, b, r );
 
+	// check solution usign decomposed matrix...
+	// =========================================
+	A.count_residual_vector( x, b, r );
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
+
+	// or check using initial matrix (before decomposition) - just for test
+	A_.count_residual_vector( x, b, r );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 }
 
@@ -104,13 +122,19 @@ TEST( non_singular_linear_equation_complex_double, QR_decomposition_Householder 
 			A.set_element( generate_complex_random< double >( 0.0001, 10000.0 ), row, col );
 	}
 
-	// make a copy for residual vector verification
-	// ============================================
+	// make a copy for residual vector verification - this part is not needed (its just for test)
+	// ==========================================================================================
 	auto A_ = A;
 
 	A.QR_decomposition();
 	A.solve_QR( x, b );
-	A_.count_residual_vector( x, b, r );
 
+	// check solution usign decomposed matrix...
+	// =========================================
+	A.count_residual_vector( x, b, r );
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
+
+	// or check using initial matrix (before decomposition) - just for test
+	A_.count_residual_vector( x, b, r );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
 }

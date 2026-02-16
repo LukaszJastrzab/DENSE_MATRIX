@@ -37,6 +37,8 @@ public:
 	void set_element( T value, size_t row, size_t col );
 
 	// it counts value r := Ax - b
+	void count_residual_Ax_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
+	void count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 	void count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 
 	/// decomposes matrix "in situ" to factors QR using Householder method
@@ -130,7 +132,7 @@ void dense_matrix< T >::QR_decomposition()
 	if( m_rows < m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_rows < m_cols" );
 
-	auto max_steps = std::min( m_rows - 1, m_cols );
+	const auto max_steps = std::min( m_rows - 1, m_cols );
 
 	// additioanl stored elements needed to recreated Householder vectors v
 	// ====================================================================
@@ -211,7 +213,7 @@ void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b
 	if( m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR() - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
 
-	auto max_steps = std::min( m_rows - 1, m_cols );
+	const auto max_steps = std::min( m_rows - 1, m_cols );
 
 	// first x := Q^T * b = H_1 * H_2 * ... * H_k * b
 	// ==============================================
@@ -240,14 +242,61 @@ void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b
 }
 
 template< typename T >
-void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+void dense_matrix< T >::count_residual_Ax_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
-		throw std::invalid_argument( "dense_matrix< T >::count_residual_vector - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
+	if ( m_dynamic_state != DYNAMIC_STATE::INIT )
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::INIT" );
 
 	for( size_t row{ 0 }; row < m_rows; ++row )
 		r[ row ] = -b[ row ];
 	for( size_t row{ 0 }; row < m_rows; ++row )
 		for( size_t col{ 0 }; col < m_cols; ++col )
 			r[ row ] += ( x[ col ] * m_matrix[ row ][ col ] );
+}
+
+template< typename T >
+void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+{
+	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_QRx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
+	if( m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED )
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
+
+	const int max_steps = std::min( m_rows - 1, m_cols );
+
+	for( size_t row{ 0 }; row < m_rows; ++row )
+		for( size_t col{ row }; col < m_cols; ++col )
+			r[ row ] += ( x[ col ] * m_matrix[ row ][ col ] );
+
+	for( int step{ max_steps - 1 }; step >= 0; --step )
+	{
+		T vRx{ conjugate( m_v_firsts[ step ] ) * r[ step ] };
+		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
+			vRx += conjugate( m_matrix[ s ][ step ] ) * r[ s ];
+
+		r[ step ] -= m_betas[ step ] * m_v_firsts[ step ] * vRx;
+		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
+			r[ s ] -= m_betas[ step ] * m_matrix[ s ][ step ] * vRx;
+	}
+
+	for( size_t row{ 0 }; row < m_rows; ++row )
+		r[ row ] -= b[ row ];
+}
+
+template< typename T >
+void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+{
+	switch( m_dynamic_state )
+	{
+	case DYNAMIC_STATE::INIT:
+		count_residual_Ax_b( x, b, r );
+		break;
+	case DYNAMIC_STATE::QR_DECOMPOSED:
+		count_residual_QRx_b( x, b, r );
+		break;
+	default:
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_vector - state not supported" );
+	}
 }
