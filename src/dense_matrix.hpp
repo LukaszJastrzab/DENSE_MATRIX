@@ -155,7 +155,7 @@ void dense_matrix< T >::QR_decomposition()
 		// stabilization sign calculation
 		// ==============================
 		double alpha_abs = std::abs( m_matrix[ step ][ step ] );
-		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / alpha_abs : T{ -1 } );
+		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< real_t >( alpha_abs ) } : T{ -1 } );
 		T sign_norm = sign * T{ static_cast< real_t >( col_norm ) };
 
 		m_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
@@ -167,7 +167,7 @@ void dense_matrix< T >::QR_decomposition()
 
 		// store additional required by QR decomposition data 
 		// ==================================================
-		m_betas[ step ] = 2.0 / vTv;
+		m_betas[ step ] = static_cast< real_t >( 2.0 ) / vTv;
 
 
 		// apply the Householder transformation to the remaining submatrix
