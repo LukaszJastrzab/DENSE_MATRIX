@@ -44,8 +44,10 @@ public:
 	/// decomposes matrix "in situ" to factors QR using Householder method
 	void QR_decomposition();
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
-	void solve_QR( std::vector< T >& x, const std::vector< T >& b ) const;
+	void solve_QR( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
 
+	/// Method improves the accuracy of the solution
+	void iterative_refinement( const dense_matrix< T >& A_orig, std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it ) const;
 
 	/// mult operator that mutliplise matrix A by vector x
 	template< typename U >
@@ -205,7 +207,7 @@ void dense_matrix< T >::QR_decomposition()
 }
 
 template< typename T >
-void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b ) const
+void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y ) const
 {
 	if( b.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR - b.size() != m_rows" );
@@ -298,5 +300,58 @@ void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const 
 		break;
 	default:
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_vector - state not supported" );
+	}
+}
+
+template < typename T >
+void dense_matrix< T >::iterative_refinement( const dense_matrix< T >& A_orig, std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it ) const
+{
+	if( m_rows < m_cols )
+		throw std::exception( "dense_matrix< T >::iterative_refinement - m_rows < m_cols" );
+
+	const size_t N = m_rows;
+
+	std::vector< T > d( N );
+	std::vector< T > r( N );
+	std::vector< T > y( N );
+
+	size_t iteration = 0;
+	count_residual_vector( x, b, r );
+	double v_norm = l2_norm( r );
+	double new_v_norm;
+
+	// int while condition are contained 2 conditions to stop the calculations,
+	// third condition is implemented inside the loop
+	// =======================================================================
+	while( iteration < max_it && v_norm > acc )
+	{
+		switch( m_dynamic_state )
+		{
+		case DYNAMIC_STATE::QR_DECOMPOSED:
+			solve_QR( d, r, &y );
+			for( size_t i = 0; i < N; ++i )
+				d[ i ] = x[ i ] - d[ i ];
+			break;
+
+		default:
+			throw std::invalid_argument( "dense_matrix< T >::iterative_refinement - dynamic state not supported" );
+		}
+
+		A_orig.count_residual_vector( d, b, r );
+		new_v_norm = l2_norm( r );
+
+		// if norm of new residual vector is less then previous then accept new solution
+		// =============================================================================
+		if( new_v_norm < v_norm )
+		{
+			for( size_t i = 0; i < N; ++i )
+				x[ i ] = d[ i ];
+			v_norm = new_v_norm;
+			iteration++;
+		}
+		// otherwise keep previous solution
+		// ================================
+		else
+			break;
 	}
 }
