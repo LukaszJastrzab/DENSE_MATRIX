@@ -74,13 +74,18 @@ private:
 
 
 	// row permutation
-	std::vector< T > m_p_row;	/// under i-th index : original row number
+	std::vector< int > m_p_row;		/// under i-th index : original row number
 	// row rev permutation
-	std::vector< T > m_rp_row;	/// under i-th index : position of i-th original row
+	std::vector< int > m_rp_row;	/// under i-th index : position of i-th original row
 	// column permutation
-	std::vector< T > m_p_col;	/// under i-th index : original column number
+	std::vector< int > m_p_col;		/// under i-th index : original column number
 	// column rev permutation
-	std::vector< T > m_rp_col;	/// under i-th index : position of i-th original column
+	std::vector< int > m_rp_col;	/// under i-th index : position of i-th original column
+
+	/// function permuts row lying on pos1 position with row lying on pos2 position
+	void permute_rows( size_t pos1, size_t pos2 );
+	/// function permuts col lying on pos1 position with col lying on pos2 position
+	void permute_cols( size_t pos1, size_t pos2 );
 
 };
 
@@ -121,6 +126,36 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 			result[ r ] += A.m_matrix[ r ][ c ] * x[ c ];
 
 	return result;
+}
+
+template < typename T >
+inline void dense_matrix< T >::permute_rows( size_t pos1, size_t pos2 )
+{
+	if( pos1 == pos2 )
+		return;
+
+	if( pos1 >= m_rows || pos2 >= m_rows )
+		throw std::out_of_range( "dense_matrix< T >::permute_rows: values out of range" );
+
+	m_rp_row[ m_p_row[ pos1 ] ] = pos2;
+	m_rp_row[ m_p_row[ pos2 ] ] = pos1;
+
+	std::swap( m_p_row[ pos1 ], m_p_row[ pos2 ] );
+}
+
+template < typename T >
+inline void dense_matrix< T >::permute_cols( size_t pos1, size_t pos2 )
+{
+	if( pos1 == pos2 )
+		return;
+
+	if( pos1 >= m_cols || pos2 >= m_cols )
+		throw std::out_of_range( "dense_matrix< T >::permute_cols: values out of range" );
+
+	m_rp_col[ m_p_col[ pos1 ] ] = pos2;
+	m_rp_col[ m_p_col[ pos2 ] ] = pos1;
+
+	std::swap( m_p_col[ pos1 ], m_p_col[ pos2 ] );
 }
 
 template< typename T >
