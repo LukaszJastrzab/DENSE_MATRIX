@@ -43,7 +43,7 @@ public:
 	void count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
-	void LU_decomposition( const size_t pivoting_rows );
+	void LU_decomposition( size_t pivoting_rows = 0 );
 	/// Method solves LU problem (LU_decomposition is needed to call before)
 	void solve_LU( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
 
@@ -58,7 +58,6 @@ public:
 	/// mult operator that mutliplise matrix A by vector x
 	template< typename U >
 	friend std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& x );
-
 
 
 private:
@@ -79,17 +78,9 @@ private:
 
 	// row permutation
 	std::vector< size_t > m_p_row;		/// under i-th index : original row number
-	// row rev permutation
-	std::vector< size_t > m_rp_row;		/// under i-th index : position of i-th original row
 	// column permutation
 	std::vector< size_t > m_p_col;		/// under i-th index : original column number
-	// column rev permutation
-	std::vector< size_t > m_rp_col;		// under i-th index : position of i-th original column
 
-	/// function permuts row lying on pos1 position with row lying on pos2 position
-	void permute_rows( const size_t pos1, const size_t pos2 );
-	/// function permuts col lying on pos1 position with col lying on pos2 position
-	void permute_cols( const size_t pos1, const size_t pos2 );
 	/// function for pivoting during LU decomposition
 	void choose_pivot( const size_t stage, const size_t search );
 
@@ -135,36 +126,6 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 }
 
 template < typename T >
-inline void dense_matrix< T >::permute_rows( const size_t pos1, const size_t pos2 )
-{
-	if( pos1 == pos2 )
-		return;
-
-	if( pos1 >= m_rows || pos2 >= m_rows )
-		throw std::out_of_range( "dense_matrix< T >::permute_rows: values out of range" );
-
-	m_rp_row[ m_p_row[ pos1 ] ] = pos2;
-	m_rp_row[ m_p_row[ pos2 ] ] = pos1;
-
-	std::swap( m_p_row[ pos1 ], m_p_row[ pos2 ] );
-}
-
-template < typename T >
-inline void dense_matrix< T >::permute_cols( const size_t pos1, const size_t pos2 )
-{
-	if( pos1 == pos2 )
-		return;
-
-	if( pos1 >= m_cols || pos2 >= m_cols )
-		throw std::out_of_range( "dense_matrix< T >::permute_cols: values out of range" );
-
-	m_rp_col[ m_p_col[ pos1 ] ] = pos2;
-	m_rp_col[ m_p_col[ pos2 ] ] = pos1;
-
-	std::swap( m_p_col[ pos1 ], m_p_col[ pos2 ] );
-}
-
-template < typename T >
 void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 {
 	const size_t LastSearch = ( step + search < m_rows ? step + search : m_rows );
@@ -185,13 +146,12 @@ void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 			}
 		}
 
-	permute_rows( ROW, step );
-	permute_cols( COL, step );
+	std::swap( m_p_row[ ROW ], m_p_row[ step ] );
+	std::swap( m_p_col[ COL ], m_p_col[ step ] );
 }
 
-
 template< typename T >
-void dense_matrix< T >::LU_decomposition( const size_t pivoting_rows )
+void dense_matrix< T >::LU_decomposition( size_t pivoting_rows )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
@@ -199,13 +159,16 @@ void dense_matrix< T >::LU_decomposition( const size_t pivoting_rows )
 	if( m_rows < m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: m_rows < m_cols" );
 
+	// 0 means max pivoting strategy ( search through all active parts of active rows )
+	// ================================================================================
+	if( pivoting_rows == 0 )
+		pivoting_rows = m_rows;
+
 	m_p_row.resize( m_rows );
 	std::iota( m_p_row.begin(), m_p_row.end(), 0 );
-	m_rp_row = m_p_row;
 
 	m_p_col.resize( m_cols );
 	std::iota( m_p_col.begin(), m_p_col.end(), 0 );
-	m_rp_col = m_p_col;
 
 	const size_t max_steps = std::min( m_rows - 1, m_cols );
 
@@ -264,7 +227,7 @@ void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b
 		y->at( row ) = b[ p_row ];
 
 		for( size_t col{ 0 }; col < row; ++col )
-			y->at( row ) -= m_matrix[ p_row ][ m_rp_col[ col ] ] * y->at( col );
+			y->at( row ) -= m_matrix[ p_row ][ m_p_col[ col ] ] * y->at( col );
 	}
 
 	// second solve the equation Ux = y
