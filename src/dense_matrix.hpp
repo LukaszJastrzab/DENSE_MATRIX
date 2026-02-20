@@ -4,6 +4,7 @@
 #include <cmath>
 #include <type_traits>
 #include <stdexcept>
+#include <numeric>
 
 #include <utilities.cuh>
 
@@ -41,6 +42,11 @@ public:
 	void count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 	void count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 
+	/// decomposes matrix "in situ" to factors LU using Gauss elimination
+	void LU_decomposition( const size_t pivoting_rows );
+	/// Method solves LU problem (LU_decomposition is needed to call before)
+	void solve_LU( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
+
 	/// decomposes matrix "in situ" to factors QR using Householder method
 	void QR_decomposition();
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
@@ -66,26 +72,26 @@ private:
 	/// matrix data
 	std::vector< std::vector< T > > m_matrix;
 
-	/// for LU decomposition
-	std::vector< T > m_pivots;
 	/// for QR decomposition
 	std::vector< T > m_betas;
 	std::vector< T > m_v_firsts;
 
 
 	// row permutation
-	std::vector< int > m_p_row;		/// under i-th index : original row number
+	std::vector< size_t > m_p_row;		/// under i-th index : original row number
 	// row rev permutation
-	std::vector< int > m_rp_row;	/// under i-th index : position of i-th original row
+	std::vector< size_t > m_rp_row;		/// under i-th index : position of i-th original row
 	// column permutation
-	std::vector< int > m_p_col;		/// under i-th index : original column number
+	std::vector< size_t > m_p_col;		/// under i-th index : original column number
 	// column rev permutation
-	std::vector< int > m_rp_col;	/// under i-th index : position of i-th original column
+	std::vector< size_t > m_rp_col;		// under i-th index : position of i-th original column
 
 	/// function permuts row lying on pos1 position with row lying on pos2 position
-	void permute_rows( size_t pos1, size_t pos2 );
+	void permute_rows( const size_t pos1, const size_t pos2 );
 	/// function permuts col lying on pos1 position with col lying on pos2 position
-	void permute_cols( size_t pos1, size_t pos2 );
+	void permute_cols( const size_t pos1, const size_t pos2 );
+	/// function for pivoting during LU decomposition
+	void choose_pivot( const size_t stage, const size_t search );
 
 };
 
@@ -129,7 +135,7 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 }
 
 template < typename T >
-inline void dense_matrix< T >::permute_rows( size_t pos1, size_t pos2 )
+inline void dense_matrix< T >::permute_rows( const size_t pos1, const size_t pos2 )
 {
 	if( pos1 == pos2 )
 		return;
@@ -144,7 +150,7 @@ inline void dense_matrix< T >::permute_rows( size_t pos1, size_t pos2 )
 }
 
 template < typename T >
-inline void dense_matrix< T >::permute_cols( size_t pos1, size_t pos2 )
+inline void dense_matrix< T >::permute_cols( const size_t pos1, const size_t pos2 )
 {
 	if( pos1 == pos2 )
 		return;
@@ -156,6 +162,122 @@ inline void dense_matrix< T >::permute_cols( size_t pos1, size_t pos2 )
 	m_rp_col[ m_p_col[ pos2 ] ] = pos1;
 
 	std::swap( m_p_col[ pos1 ], m_p_col[ pos2 ] );
+}
+
+template < typename T >
+void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
+{
+	const size_t LastSearch = ( step + search < m_rows ? step + search : m_rows );
+
+	size_t ROW{ 0 }, COL{ 0 };
+	double ABS_VAL{ 0.0 };
+
+	for( size_t row{ step }; row < LastSearch; ++row )
+		for( size_t col{ step }; col < m_cols; ++col )
+		{
+			const double new_abs{ abs_val( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] ) };
+
+			if( new_abs > ABS_VAL )
+			{
+				ABS_VAL = new_abs;
+				ROW = row;
+				COL = col;
+			}
+		}
+
+	permute_rows( ROW, step );
+	permute_cols( COL, step );
+}
+
+
+template< typename T >
+void dense_matrix< T >::LU_decomposition( const size_t pivoting_rows )
+{
+	if( m_dynamic_state != DYNAMIC_STATE::INIT )
+		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
+
+	if( m_rows < m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: m_rows < m_cols" );
+
+	m_p_row.resize( m_rows );
+	std::iota( m_p_row.begin(), m_p_row.end(), 0 );
+	m_rp_row = m_p_row;
+
+	m_p_col.resize( m_cols );
+	std::iota( m_p_col.begin(), m_p_col.end(), 0 );
+	m_rp_col = m_p_col;
+
+	const size_t max_steps = std::min( m_rows - 1, m_cols );
+
+	for( size_t step{ 0 }; step < max_steps; ++step )
+	{
+		choose_pivot( step, pivoting_rows );
+
+		const size_t eliminating_row = m_p_row[ step ];
+		const size_t stage_col = m_p_col[ step ];
+
+		const auto pivot{ m_matrix[ eliminating_row ][ stage_col ] };
+
+		for( size_t row{ step + 1 }; row < m_rows; ++row )
+		{
+			const size_t eliminated_row = m_p_row[ row ];
+
+			m_matrix[ eliminated_row ][ stage_col ] /= pivot;
+			const auto eliminator = m_matrix[ eliminated_row ][ stage_col ];
+
+			for( size_t col{ step + 1 }; col < m_cols; ++col )
+			{
+				const size_t p_col{ m_p_col[ col ] };
+				m_matrix[ eliminated_row ][ p_col ] -= eliminator * m_matrix[ eliminating_row ][ p_col ];
+			}
+		}
+	}
+
+	m_dynamic_state = DYNAMIC_STATE::LU_DECOMPOSED;
+}
+
+template< typename T >
+void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y ) const
+{
+	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
+		throw std::invalid_argument( " dense_matrix< T >::solve_LU: LU_decomposition is needed before" );
+
+	if( m_cols > m_rows )
+		throw std::invalid_argument( " dense_matrix< T >::solve_LU: m_cols > m_rows" );
+
+	const size_t max_step{ std::min( m_rows - 1, m_cols ) };
+	std::vector< T > y_alloc;
+
+	if( y == nullptr )
+	{
+		y_alloc.resize( m_rows, T{ 666.0 } );
+		y = &y_alloc;
+	}
+
+	// first solve the equation Ly = b
+	// ===============================
+	y->at( 0 ) = b[ m_p_row[ 0 ] ];
+
+	for( size_t row{ 1 }; row < m_cols; ++row )
+	{
+		const int p_row = m_p_row[ row ];
+		y->at( row ) = b[ p_row ];
+
+		for( size_t col{ 0 }; col < row; ++col )
+			y->at( row ) -= m_matrix[ p_row ][ m_rp_col[ col ] ] * y->at( col );
+	}
+
+	// second solve the equation Ux = y
+	// ================================
+	for( int row{ static_cast< int >( m_cols ) - 1 }; row >= 0; --row )
+	{
+		x[ m_p_col[ row ] ] = y->at( row );
+
+		for( int col{ row + 1 }; col < m_cols; ++col )
+			x[ m_p_col[ row ] ] -= m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] * x[ m_p_col[ col ] ];
+
+		x[ m_p_col[ row ] ] /= m_matrix[ m_p_row[ row ] ][ m_p_col[ row ] ];
+	}
 }
 
 template< typename T >
