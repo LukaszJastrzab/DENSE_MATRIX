@@ -28,8 +28,12 @@ TEST( non_singular_linear_equation_real_double, LU_decomposition_Gauss )
 
 	auto A_ = A;
 
-	A.LU_decomposition();
+	A.LU_decomposition( 2 );
 	A.solve_LU( x, b );
+
+	A.count_residual_vector( x, b, r );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
 
 	A_.count_residual_vector( x, b, r );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
@@ -58,8 +62,12 @@ TEST( non_singular_linear_equation_complex_double, LU_decomposition_Gauss )
 	A.LU_decomposition();
 	A.solve_LU( x, b );
 
-	A_.count_residual_vector( x, b, r );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
+	A.count_residual_vector( x, b, r ); // compute residual vector using decomposition
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
+
+	A_.count_residual_vector( x, b, r ); // compute residual vector using original matrix
+	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 }
 
 TEST( non_singular_linear_equation_real_float, QR_decomposition_Householder )
@@ -85,11 +93,11 @@ TEST( non_singular_linear_equation_real_float, QR_decomposition_Householder )
 	A.QR_decomposition();
 	A.solve_QR( x, b );
 
-	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( A_, x, b, 0.000000000001, 1000 );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
+	A.count_residual_vector( x, b, r ); // compute residual vector using decomposition
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 
-	A_.count_residual_vector( x, b, r );
+	A_.count_residual_vector( x, b, r ); // compute residual vector using original matrix
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 }
 
@@ -117,7 +125,7 @@ TEST( non_singular_linear_equation_real_double, QR_decomposition_Householder )
 	A.solve_QR( x, b );
 
 	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( A_, x, b, 0.000000000001, 1000 );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
 
 	A_.count_residual_vector( x, b, r );
@@ -148,7 +156,7 @@ TEST( non_singular_linear_equation_complex_float, QR_decomposition_Householder )
 	A.solve_QR( x, b );
 
 	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( A_, x, b, 0.000000000001, 1000 );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
 
 	A_.count_residual_vector( x, b, r );
@@ -179,7 +187,7 @@ TEST( non_singular_linear_equation_complex_double, QR_decomposition_Householder 
 	A.solve_QR( x, b );
 
 	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( A_, x, b, 0.000000000001, 1000 );
+	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
 	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
 
 	A_.count_residual_vector( x, b, r );

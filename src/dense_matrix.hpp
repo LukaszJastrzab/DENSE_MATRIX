@@ -39,6 +39,7 @@ public:
 
 	// it counts value r := Ax - b
 	void count_residual_Ax_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
+	void count_residual_LUx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 	void count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 	void count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
 
@@ -53,7 +54,7 @@ public:
 	void solve_QR( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
 
 	/// Method improves the accuracy of the solution
-	void iterative_refinement( const dense_matrix< T >& A_orig, std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it ) const;
+	void iterative_refinement( std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
 
 	/// mult operator that mutliplise matrix A by vector x
 	template< typename U >
@@ -379,6 +380,33 @@ void dense_matrix< T >::count_residual_Ax_b( const std::vector< T >& x, const st
 }
 
 template< typename T >
+void dense_matrix< T >::count_residual_LUx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+{
+	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_LUx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
+	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
+
+	std::vector< T > w( m_rows, T{} );
+
+	// compute w=Ux
+	// ============
+	for( size_t row{ 0 }; row < m_rows; ++row )
+		for( size_t col{ row }; col < m_cols; ++col )
+			w[ row ] += ( x[ m_p_col[ col ] ] * m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] );
+
+	// compute r = Lw - b
+	// ==================
+	for( size_t row{ 0 }; row < m_rows; ++row )
+	{
+		r[ m_p_row[ row ] ] = w[ row ] - b[ m_p_row[ row ] ];
+
+		for( size_t col{ 0 }; col < row; ++col )
+			r[ m_p_row[ row ] ] += w[ col ] * m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ];
+	}
+}
+
+template< typename T >
 void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
@@ -389,8 +417,11 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const s
 	const int max_steps = std::min( m_rows - 1, m_cols );
 
 	for( size_t row{ 0 }; row < m_rows; ++row )
+	{
+		r[ row ] = T{};
 		for( size_t col{ row }; col < m_cols; ++col )
 			r[ row ] += ( x[ col ] * m_matrix[ row ][ col ] );
+	}
 
 	for( int step{ max_steps - 1 }; step >= 0; --step )
 	{
@@ -415,16 +446,22 @@ void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const 
 	case DYNAMIC_STATE::INIT:
 		count_residual_Ax_b( x, b, r );
 		break;
+
+	case DYNAMIC_STATE::LU_DECOMPOSED:
+		count_residual_LUx_b( x, b, r );
+		break;
+
 	case DYNAMIC_STATE::QR_DECOMPOSED:
 		count_residual_QRx_b( x, b, r );
 		break;
+
 	default:
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_vector - state not supported" );
 	}
 }
 
 template < typename T >
-void dense_matrix< T >::iterative_refinement( const dense_matrix< T >& A_orig, std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it ) const
+void dense_matrix< T >::iterative_refinement( std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig ) const
 {
 	if( m_rows < m_cols )
 		throw std::exception( "dense_matrix< T >::iterative_refinement - m_rows < m_cols" );
@@ -436,7 +473,12 @@ void dense_matrix< T >::iterative_refinement( const dense_matrix< T >& A_orig, s
 	std::vector< T > y( N );
 
 	size_t iteration = 0;
-	count_residual_vector( x, b, r );
+
+	if ( A_orig != nullptr )
+		A_orig->count_residual_vector( x, b, r );
+	else
+		count_residual_vector( x, b, r );
+
 	double v_norm = l2_norm( r );
 	double new_v_norm;
 
@@ -447,17 +489,26 @@ void dense_matrix< T >::iterative_refinement( const dense_matrix< T >& A_orig, s
 	{
 		switch( m_dynamic_state )
 		{
+		case DYNAMIC_STATE::LU_DECOMPOSED:
+			solve_LU( d, r, &y );
+			break;
+
 		case DYNAMIC_STATE::QR_DECOMPOSED:
 			solve_QR( d, r, &y );
-			for( size_t i = 0; i < N; ++i )
-				d[ i ] = x[ i ] - d[ i ];
 			break;
 
 		default:
 			throw std::invalid_argument( "dense_matrix< T >::iterative_refinement - dynamic state not supported" );
 		}
 
-		A_orig.count_residual_vector( d, b, r );
+		for( size_t i = 0; i < N; ++i )
+			d[ i ] = x[ i ] - d[ i ];
+
+		if( A_orig != nullptr )
+			A_orig->count_residual_vector( d, b, r );
+		else
+			count_residual_vector( d, b, r );
+
 		new_v_norm = l2_norm( r );
 
 		// if norm of new residual vector is less then previous then accept new solution
