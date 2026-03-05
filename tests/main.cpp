@@ -86,3 +86,18 @@ TYPED_TEST( non_singular_linear_equation, QR_decomposition )
 	EXPECT_NO_THROW( A.QR_decomposition() );
 }
 
+
+
+template< typename T >
+class non_singular_linear_equation_little : public non_singular_linear_equation< T >
+{
+	virtual size_t get_mx_size() override { return 5; }
+};
+
+TYPED_TEST_SUITE( non_singular_linear_equation_little, test_types );
+
+TYPED_TEST( non_singular_linear_equation_little, LU_decomposition )
+{
+	// decompose A=LU using Gauss elimination
+	EXPECT_NO_THROW( A.LU_decomposition( 1 ) );
+}
