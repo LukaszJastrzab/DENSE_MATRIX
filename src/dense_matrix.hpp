@@ -129,13 +129,13 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 template < typename T >
 void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 {
-	const size_t LastSearch = ( step + search < m_rows ? step + search : m_rows );
+	const size_t LastSearch = ( step + search < m_cols ? step + search : m_cols );
 
 	size_t ROW{ 0 }, COL{ 0 };
 	double ABS_VAL{ 0.0 };
 
-	for( size_t row{ step }; row < LastSearch; ++row )
-		for( size_t col{ step }; col < m_cols; ++col )
+	for( size_t col{ step }; col < LastSearch; ++col )
+		for( size_t row{ step }; row < m_rows; ++row )
 		{
 			const double new_abs{ abs_val( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] ) };
 
