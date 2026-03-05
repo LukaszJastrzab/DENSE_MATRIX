@@ -32,6 +32,9 @@ public:
 	///destructor
 	~dense_matrix() = default;
 
+	/// defualt assign operator
+	dense_matrix< T >& operator=( const dense_matrix< T >& ) = default;
+
 	/// sets matrix sizes and allocates memory
 	void init( size_t rows, size_t cols );
 	/// adds elements and throws exception if row / col is out of range

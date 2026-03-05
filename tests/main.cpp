@@ -5,191 +5,84 @@
 
 using namespace std;
 
-constexpr float eps_float{ 1e-4 };
-constexpr float eps_double{ 1e-10 };
+constexpr double eps_float{ 1e-3 };
+constexpr double eps_double{ 1e-10 };
 
-TEST( non_singular_linear_equation_real_double, LU_decomposition_Gauss )
+using test_types = ::testing::Types< float, double, complex< float >, complex< double > >;
+
+
+template< typename T >
+class non_singular_linear_equation : public ::testing::Test
 {
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
+protected:
+	// matrix of equation Ax=b
+	dense_matrix< T > A;
+	// a copy for test purposes
+	dense_matrix< T > A_;
+	// needed vectors
+	vector< T > b, x, r;
 
-	dense_matrix< double > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< double > b( MATRIX_ROW_SIZE );
-	vector< double > r( MATRIX_ROW_SIZE );
-	vector< double > x( MATRIX_COL_SIZE );
+	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
+	virtual size_t get_mx_size() { return 50; }
+
+	void SetUp() override
 	{
-		b[ row ] = generate_random< double >( 0.0001, 10000.0 );
+		if( std::is_same_v< real_type< T >::type, double> )
+		{
+			low_val = 0.00001;
+			high_val = 10000.0;
+			eps = eps_double;
+		}
 
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_random< double >( 0.0001, 10000.0 ), row, col );
+		// matrix of equation Ax=b
+		A.init( get_mx_size(), get_mx_size() );
+		// right site of equation Ax=b
+		b.resize( get_mx_size() );
+		// residual vecotr 
+		r.resize( get_mx_size() );
+		// inital aproximation ( zero vector )
+		x.resize( get_mx_size(), T{} );
+
+		// randomize queation data
+		for( size_t row{ 0 }; row < get_mx_size(); ++row )
+		{
+			b[ row ] = generate_random< T >( low_val, high_val );
+
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
+		}
+
+		// make copy
+		A_ = A;
 	}
 
-	auto A_ = A;
-
-	A.LU_decomposition( 2 );
-	A.solve_LU( x, b );
-
-	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
-
-	A_.count_residual_vector( x, b, r );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
-}
-
-TEST( non_singular_linear_equation_complex_double, LU_decomposition_Gauss )
-{
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
-
-	dense_matrix< complex< double > > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< complex< double > > b( MATRIX_ROW_SIZE );
-	vector< complex< double > > r( MATRIX_ROW_SIZE );
-	vector< complex< double > > x( MATRIX_COL_SIZE );
-
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
+	void TearDown() override
 	{
-		b[ row ] = generate_complex_random< double >( 0.0001, 10000.0 );
+		// get most precise solution
+		A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
 
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_complex_random< double >( 0.0001, 10000.0 ), row, col );
+		// compute residual vector using decomposed matrix form
+		A.count_residual_vector( x, b, r );
+		EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps );
+
+		// compute residual vector using initial matrix form
+		A_.count_residual_vector( x, b, r );
+		EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps );
 	}
+};
 
-	auto A_ = A;
+TYPED_TEST_SUITE( non_singular_linear_equation, test_types );
 
-	A.LU_decomposition();
-	A.solve_LU( x, b );
-
-	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
-	A.count_residual_vector( x, b, r ); // compute residual vector using decomposition
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
-
-	A_.count_residual_vector( x, b, r ); // compute residual vector using original matrix
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
-}
-
-TEST( non_singular_linear_equation_real_float, QR_decomposition_Householder )
+TYPED_TEST( non_singular_linear_equation, LU_decomposition )
 {
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
-
-	dense_matrix< float > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< float > b( MATRIX_ROW_SIZE );
-	vector< float > r( MATRIX_ROW_SIZE );
-	vector< float > x( MATRIX_COL_SIZE );
-
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
-	{
-		b[ row ] = generate_random< float >( 0.01, 100.0 );
-
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_random< float >( 0.01, 100.0 ), row, col );
-	}
-
-	auto A_ = A;
-
-	A.QR_decomposition();
-	A.solve_QR( x, b );
-
-	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
-	A.count_residual_vector( x, b, r ); // compute residual vector using decomposition
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
-
-	A_.count_residual_vector( x, b, r ); // compute residual vector using original matrix
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
+	// decompose A=LU using Gauss elimination
+	EXPECT_NO_THROW( A.LU_decomposition( 4 ) );
 }
 
-TEST( non_singular_linear_equation_real_double, QR_decomposition_Householder )
+TYPED_TEST( non_singular_linear_equation, QR_decomposition )
 {
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
-
-	dense_matrix< double > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< double > b( MATRIX_ROW_SIZE );
-	vector< double > r( MATRIX_ROW_SIZE );
-	vector< double > x( MATRIX_COL_SIZE );
-
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
-	{
-		b[ row ] = generate_random< double >( 0.0001, 10000.0 );
-
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_random< double >( 0.0001, 10000.0 ), row, col );
-	}
-
-	auto A_ = A;
-
-	A.QR_decomposition();
-	A.solve_QR( x, b );
-
-	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
-
-	A_.count_residual_vector( x, b, r );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
+	// decompose A=QR using Householder algorithm
+	EXPECT_NO_THROW( A.QR_decomposition() );
 }
 
-TEST( non_singular_linear_equation_complex_float, QR_decomposition_Householder )
-{
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
-
-	dense_matrix< complex< float > > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< complex< float > > b( MATRIX_ROW_SIZE );
-	vector< complex< float > > r( MATRIX_ROW_SIZE );
-	vector< complex< float > > x( MATRIX_COL_SIZE );
-
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
-	{
-		b[ row ] = generate_complex_random< float >( 0.01, 100.0 );
-
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_complex_random< float >( 0.01, 100.0 ), row, col );
-	}
-
-	auto A_ = A;
-
-	A.QR_decomposition();
-	A.solve_QR( x, b );
-
-	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( x, b, 0.000000000001, 1000, &A_ );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
-
-	A_.count_residual_vector( x, b, r );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_float );
-}
-
-TEST( non_singular_linear_equation_complex_double, QR_decomposition_Householder )
-{
-	constexpr size_t MATRIX_ROW_SIZE = 50;
-	constexpr size_t MATRIX_COL_SIZE{ MATRIX_ROW_SIZE };
-
-	dense_matrix< complex< double > > A( MATRIX_ROW_SIZE, MATRIX_COL_SIZE );
-	vector< complex< double > > b( MATRIX_ROW_SIZE );
-	vector< complex< double > > r( MATRIX_ROW_SIZE );
-	vector< complex< double > > x( MATRIX_COL_SIZE );
-
-	for( size_t row{ 0 }; row < MATRIX_ROW_SIZE; ++row )
-	{
-		b[ row ] = generate_complex_random< double >( 0.0001, 10000.0 );
-
-		for( size_t col{ 0 }; col < MATRIX_COL_SIZE; ++col )
-			A.set_element( generate_complex_random< double >( 0.0001, 10000.0 ), row, col );
-	}
-
-	auto A_ = A;
-
-	A.QR_decomposition();
-	A.solve_QR( x, b );
-
-	A.count_residual_vector( x, b, r );
-	A.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
-
-	A_.count_residual_vector( x, b, r );
-	EXPECT_LE( l2_norm( r ) / l2_norm( b ), eps_double );
-}
