@@ -217,7 +217,7 @@ void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b
 
 	if( y == nullptr )
 	{
-		y_alloc.resize( m_rows, T{ 666.0 } );
+		y_alloc.resize( m_rows );
 		y = &y_alloc;
 	}
 
