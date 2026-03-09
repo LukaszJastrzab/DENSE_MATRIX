@@ -15,12 +15,15 @@ template< typename T >
 class non_singular_linear_equation : public ::testing::Test
 {
 protected:
+	// double type used in solving / refinement
+	using DT = typename double_type< T >::type;
+
 	// matrix of equation Ax=b
 	dense_matrix< T > A;
 	// a copy for test purposes
 	dense_matrix< T > A_;
 	// needed vectors
-	vector< T > b, x, r;
+	vector< DT > b, x, r;
 
 	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
@@ -47,7 +50,7 @@ protected:
 		// randomize queation data
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 		{
-			b[ row ] = generate_random< T >( low_val, high_val );
+			b[ row ] = generate_random< DT >( low_val, high_val );
 
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
 				A.set_element( generate_random< T >( low_val, high_val ), row, col );

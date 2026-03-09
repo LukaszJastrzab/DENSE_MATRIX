@@ -32,6 +32,9 @@ public:
 	///destructor
 	~dense_matrix() = default;
 
+	/// double type used in solving / refinement
+	using DT = typename double_type< T >::type;
+
 	/// defualt assign operator
 	dense_matrix< T >& operator=( const dense_matrix< T >& ) = default;
 
@@ -40,24 +43,24 @@ public:
 	/// adds elements and throws exception if row / col is out of range
 	void set_element( T value, size_t row, size_t col );
 
-	// it counts value r := Ax - b
-	void count_residual_Ax_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
-	void count_residual_LUx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
-	void count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
-	void count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const;
+	/// it counts value r := Ax - b
+	void count_residual_Ax_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	void count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
 	void LU_decomposition( size_t pivoting_rows = 0 );
 	/// Method solves LU problem (LU_decomposition is needed to call before)
-	void solve_LU( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
+	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
 
 	/// decomposes matrix "in situ" to factors QR using Householder method
 	void QR_decomposition();
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
-	void solve_QR( std::vector< T >& x, const std::vector< T >& b ) const;
+	void solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const;
 
 	/// Method improves the accuracy of the solution
-	void iterative_refinement( std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
+	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
 
 	/// mult operator that mutliplise matrix A by vector x
 	template< typename U >
@@ -80,9 +83,9 @@ private:
 	std::vector< T > m_v_firsts;
 
 
-	// row permutation
+	/// row permutation
 	std::vector< size_t > m_p_row;		/// under i-th index : original row number
-	// column permutation
+	/// column permutation
 	std::vector< size_t > m_p_col;		/// under i-th index : original column number
 
 	/// function for pivoting during LU decomposition
@@ -204,7 +207,7 @@ void dense_matrix< T >::LU_decomposition( size_t pivoting_rows )
 }
 
 template< typename T >
-void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y ) const
+void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y ) const
 {
 	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
 		throw std::invalid_argument( " dense_matrix< T >::solve_LU: LU_decomposition is needed before" );
@@ -213,7 +216,7 @@ void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b
 		throw std::invalid_argument( " dense_matrix< T >::solve_LU: m_cols > m_rows" );
 
 	const size_t max_step{ std::min( m_rows - 1, m_cols ) };
-	std::vector< T > y_alloc;
+	std::vector< DT > y_alloc;
 
 	if( y == nullptr )
 	{
@@ -231,7 +234,7 @@ void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b
 		y->at( row ) = b[ p_row ];
 
 		for( size_t col{ 0 }; col < row; ++col )
-			y->at( row ) -= m_matrix[ p_row ][ m_p_col[ col ] ] * y->at( col );
+			y->at( row ) -= static_cast< DT >( m_matrix[ p_row ][ m_p_col[ col ] ] ) * y->at( col );
 	}
 
 	// second solve the equation Ux = y
@@ -241,9 +244,9 @@ void dense_matrix< T >::solve_LU( std::vector< T >& x, const std::vector< T >& b
 		x[ m_p_col[ row ] ] = y->at( row );
 
 		for( int col{ row + 1 }; col < m_cols; ++col )
-			x[ m_p_col[ row ] ] -= m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] * x[ m_p_col[ col ] ];
+			x[ m_p_col[ row ] ] -= static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] ) * x[ m_p_col[ col ] ];
 
-		x[ m_p_col[ row ] ] /= m_matrix[ m_p_row[ row ] ][ m_p_col[ row ] ];
+		x[ m_p_col[ row ] ] /= static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ row ] ] );
 	}
 }
 
@@ -331,7 +334,7 @@ void dense_matrix< T >::QR_decomposition()
 }
 
 template< typename T >
-void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b ) const
+void dense_matrix< T >::solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const
 {
 	if( b.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR - b.size() != m_rows" );
@@ -346,29 +349,29 @@ void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b
 	x = b;
 	for( size_t step{ 0 }; step < max_steps; ++step )
 	{
-		T vTb{ conjugate( m_v_firsts[ step ] ) * x[ step ] };
+		DT vTb{ conjugate( static_cast< DT >( m_v_firsts[ step ] ) ) * x[ step ] };
 		for( size_t r{ step + 1 }; r < m_rows; ++r )
-			vTb += conjugate( m_matrix[ r ][ step ] ) * x[ r ];
+			vTb += conjugate( static_cast< DT >( m_matrix[ r ][ step ] ) ) * x[ r ];
 
-		x[ step ] -= m_betas[ step ] * m_v_firsts[ step ] * vTb;
+		x[ step ] -= static_cast< DT >( m_betas[ step ] * m_v_firsts[ step ] ) * vTb;
 		for( size_t r{ step + 1 }; r < m_rows; ++r )
-			x[ r ] -= m_betas[ step ] * m_matrix[ r ][ step ] * vTb;
+			x[ r ] -= static_cast< DT >( m_betas[ step ] * m_matrix[ r ][ step ] ) * vTb;
 	}
 
 	// then solve Rx = Q^T * b by back substitution
 	// ============================================
 	for( auto r = static_cast< int >( m_cols ) - 1; r >= 0; --r )
 	{
-		T sum{ T{} };
+		DT sum{ 0.0 };
 		for( int c{ r + 1 }; c < m_cols; ++c )
-			sum += m_matrix[ r ][ c ] * x[ c ];
+			sum += static_cast< DT >( m_matrix[ r ][ c ] ) * x[ c ];
 
-		x[ r ] = ( x[ r ] - sum ) / m_matrix[ r ][ r ];
+		x[ r ] = ( x[ r ] - sum ) / static_cast< DT >( m_matrix[ r ][ r ] );
 	}
 }
 
 template< typename T >
-void dense_matrix< T >::count_residual_Ax_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+void dense_matrix< T >::count_residual_Ax_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
@@ -379,24 +382,24 @@ void dense_matrix< T >::count_residual_Ax_b( const std::vector< T >& x, const st
 		r[ row ] = -b[ row ];
 	for( size_t row{ 0 }; row < m_rows; ++row )
 		for( size_t col{ 0 }; col < m_cols; ++col )
-			r[ row ] += ( x[ col ] * m_matrix[ row ][ col ] );
+			r[ row ] += ( x[ col ] * static_cast< DT >( m_matrix[ row ][ col ] ) );
 }
 
 template< typename T >
-void dense_matrix< T >::count_residual_LUx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+void dense_matrix< T >::count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_LUx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
 	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_LUx_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
 
-	std::vector< T > w( m_rows, T{} );
+	std::vector< DT > w( m_rows, T{} );
 
 	// compute w=Ux
 	// ============
 	for( size_t row{ 0 }; row < m_rows; ++row )
 		for( size_t col{ row }; col < m_cols; ++col )
-			w[ row ] += ( x[ m_p_col[ col ] ] * m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] );
+			w[ row ] += ( x[ m_p_col[ col ] ] * static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] ) );
 
 	// compute r = Lw - b
 	// ==================
@@ -405,12 +408,12 @@ void dense_matrix< T >::count_residual_LUx_b( const std::vector< T >& x, const s
 		r[ m_p_row[ row ] ] = w[ row ] - b[ m_p_row[ row ] ];
 
 		for( size_t col{ 0 }; col < row; ++col )
-			r[ m_p_row[ row ] ] += w[ col ] * m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ];
+			r[ m_p_row[ row ] ] += w[ col ] * static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] );
 	}
 }
 
 template< typename T >
-void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+void dense_matrix< T >::count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_QRx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
@@ -421,20 +424,20 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const s
 
 	for( size_t row{ 0 }; row < m_rows; ++row )
 	{
-		r[ row ] = T{};
+		r[ row ] = DT{};
 		for( size_t col{ row }; col < m_cols; ++col )
-			r[ row ] += ( x[ col ] * m_matrix[ row ][ col ] );
+			r[ row ] += ( x[ col ] * static_cast< DT >( m_matrix[ row ][ col ] ) );
 	}
 
 	for( int step{ max_steps - 1 }; step >= 0; --step )
 	{
-		T vRx{ conjugate( m_v_firsts[ step ] ) * r[ step ] };
+		DT vRx{ conjugate( static_cast< DT >( m_v_firsts[ step ] ) ) * r[ step ] };
 		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
-			vRx += conjugate( m_matrix[ s ][ step ] ) * r[ s ];
+			vRx += conjugate( static_cast< DT >( m_matrix[ s ][ step ] ) ) * r[ s ];
 
-		r[ step ] -= m_betas[ step ] * m_v_firsts[ step ] * vRx;
+		r[ step ] -= static_cast< DT >( m_betas[ step ] * m_v_firsts[ step ] ) * vRx;
 		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
-			r[ s ] -= m_betas[ step ] * m_matrix[ s ][ step ] * vRx;
+			r[ s ] -= static_cast< DT >( m_betas[ step ] * m_matrix[ s ][ step ] ) * vRx;
 	}
 
 	for( size_t row{ 0 }; row < m_rows; ++row )
@@ -442,7 +445,7 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const s
 }
 
 template< typename T >
-void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const std::vector< T >& b, std::vector< T >& r ) const
+void dense_matrix< T >::count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const
 {
 	switch( m_dynamic_state )
 	{
@@ -464,16 +467,16 @@ void dense_matrix< T >::count_residual_vector( const std::vector< T >& x, const 
 }
 
 template < typename T >
-void dense_matrix< T >::iterative_refinement( std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig ) const
+void dense_matrix< T >::iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig ) const
 {
 	if( m_rows < m_cols )
 		throw std::exception( "dense_matrix< T >::iterative_refinement - m_rows < m_cols" );
 
 	const size_t N = m_rows;
 
-	std::vector< T > d( N );
-	std::vector< T > r( N );
-	std::vector< T > y( N );
+	std::vector< DT > d( N );
+	std::vector< DT > r( N );
+	std::vector< DT > y( N );
 
 	size_t iteration = 0;
 
