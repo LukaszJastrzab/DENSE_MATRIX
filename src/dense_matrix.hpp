@@ -54,7 +54,7 @@ public:
 	/// decomposes matrix "in situ" to factors QR using Householder method
 	void QR_decomposition();
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
-	void solve_QR( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y = nullptr ) const;
+	void solve_QR( std::vector< T >& x, const std::vector< T >& b ) const;
 
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< T >& x, const std::vector< T >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -331,7 +331,7 @@ void dense_matrix< T >::QR_decomposition()
 }
 
 template< typename T >
-void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b, std::vector< T >* y ) const
+void dense_matrix< T >::solve_QR( std::vector< T >& x, const std::vector< T >& b ) const
 {
 	if( b.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR - b.size() != m_rows" );
@@ -388,7 +388,7 @@ void dense_matrix< T >::count_residual_LUx_b( const std::vector< T >& x, const s
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_LUx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
 	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
-		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_LUx_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
 
 	std::vector< T > w( m_rows, T{} );
 
@@ -415,7 +415,7 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< T >& x, const s
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_QRx_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
 	if( m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED )
-		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
+		throw std::invalid_argument( "dense_matrix< T >::count_residual_QRx_b - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
 
 	const int max_steps = std::min( m_rows - 1, m_cols );
 
@@ -497,7 +497,7 @@ void dense_matrix< T >::iterative_refinement( std::vector< T >& x, const std::ve
 			break;
 
 		case DYNAMIC_STATE::QR_DECOMPOSED:
-			solve_QR( d, r, &y );
+			solve_QR( d, r );
 			break;
 
 		default:
