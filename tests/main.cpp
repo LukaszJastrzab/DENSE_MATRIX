@@ -77,10 +77,16 @@ protected:
 
 TYPED_TEST_SUITE( non_singular_linear_equation, test_types );
 
-TYPED_TEST( non_singular_linear_equation, LU_decomposition )
+TYPED_TEST( non_singular_linear_equation, LU_decomposition_no_scaling )
 {
 	// decompose A=LU using Gauss elimination
-	EXPECT_NO_THROW( A.LU_decomposition( 4 ) );
+	EXPECT_NO_THROW( A.LU_decomposition( false, 4 ) );
+}
+
+TYPED_TEST( non_singular_linear_equation, LU_decomposition_scaling )
+{
+	// decompose A=LU using Gauss elimination
+	EXPECT_NO_THROW( A.LU_decomposition( true, 4 ) );
 }
 
 TYPED_TEST( non_singular_linear_equation, QR_decomposition )

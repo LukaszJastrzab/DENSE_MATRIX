@@ -50,7 +50,7 @@ public:
 	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
-	void LU_decomposition( size_t pivoting_rows = 0 );
+	void LU_decomposition( bool scaling, size_t pivoting_rows = 0 );
 	/// Method solves LU problem (LU_decomposition is needed to call before)
 	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
 
@@ -88,8 +88,14 @@ private:
 	/// column permutation
 	std::vector< size_t > m_p_col;		/// under i-th index : original column number
 
+	/// row / column scaling parameters
+	std::vector< double > m_scalars;
+
+
 	/// function for pivoting during LU decomposition
 	void choose_pivot( const size_t stage, const size_t search );
+	/// row scaling
+	void row_scaling();
 
 };
 
@@ -158,7 +164,7 @@ void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 }
 
 template< typename T >
-void dense_matrix< T >::LU_decomposition( size_t pivoting_rows )
+void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
@@ -170,6 +176,11 @@ void dense_matrix< T >::LU_decomposition( size_t pivoting_rows )
 	// ================================================================================
 	if( pivoting_rows == 0 )
 		pivoting_rows = m_rows;
+
+	if( scaling )
+		row_scaling();
+	else
+		m_scalars.resize( m_rows, 1.0 );
 
 	m_p_row.resize( m_rows );
 	std::iota( m_p_row.begin(), m_p_row.end(), 0 );
@@ -226,12 +237,12 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 
 	// first solve the equation Ly = b
 	// ===============================
-	y->at( 0 ) = b[ m_p_row[ 0 ] ];
+	y->at( 0 ) = ( b[ m_p_row[ 0 ] ] * static_cast< DT >( m_scalars[ m_p_row[ 0 ] ] ) );
 
 	for( size_t row{ 1 }; row < m_cols; ++row )
 	{
 		const int p_row = m_p_row[ row ];
-		y->at( row ) = b[ p_row ];
+		y->at( row ) = ( b[ p_row ] * static_cast< DT >( m_scalars[ p_row ] ) );
 
 		for( size_t col{ 0 }; col < row; ++col )
 			y->at( row ) -= static_cast< DT >( m_matrix[ p_row ][ m_p_col[ col ] ] ) * y->at( col );
@@ -405,7 +416,7 @@ void dense_matrix< T >::count_residual_LUx_b( const std::vector< DT >& x, const 
 	// ==================
 	for( size_t row{ 0 }; row < m_rows; ++row )
 	{
-		r[ m_p_row[ row ] ] = w[ row ] - b[ m_p_row[ row ] ];
+		r[ m_p_row[ row ] ] = w[ row ] - ( b[ m_p_row[ row ] ] * static_cast< DT >( m_scalars[ m_p_row[ row ] ] ) );
 
 		for( size_t col{ 0 }; col < row; ++col )
 			r[ m_p_row[ row ] ] += w[ col ] * static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] );
@@ -530,5 +541,32 @@ void dense_matrix< T >::iterative_refinement( std::vector< DT >& x, const std::v
 		// ================================
 		else
 			break;
+	}
+}
+
+
+template < typename T >
+void dense_matrix< T >::row_scaling()
+{
+	if( m_dynamic_state != DYNAMIC_STATE::INIT )
+		throw std::invalid_argument( "dense_matrix< T >::row_scaling: INIT state is required" );
+
+	double max_scalar{ 0.0 };
+	m_scalars.resize( m_rows, 0.0 );
+
+	for( size_t row{ 0 }; row < m_rows; ++row )
+	{
+		for( size_t col{ 0 }; col < m_cols; ++col )
+			m_scalars[ row ] += abs_val( m_matrix[ row ][ col ] );
+
+		max_scalar = std::max( max_scalar, m_scalars[ row ] );
+	}
+
+	for( size_t row{ 0 }; row < m_rows; ++row )
+	{
+		m_scalars[ row ] = ( max_scalar / m_scalars[ row ] );
+
+		for( size_t col{ 0 }; col < m_cols; ++col )
+			m_matrix[ row ][ col ] *= static_cast< T >( m_scalars[ row ] );
 	}
 }
