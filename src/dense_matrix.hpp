@@ -55,7 +55,7 @@ public:
 	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
 
 	/// decomposes matrix "in situ" to factors QR using Householder method
-	void QR_decomposition();
+	void QR_decomposition( bool scaling );
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
 	void solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const;
 
@@ -264,7 +264,7 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 }
 
 template< typename T >
-void dense_matrix< T >::QR_decomposition()
+void dense_matrix< T >::QR_decomposition( bool scaling )
 {
 	using real_t = real_type< T >::type;
 
@@ -273,6 +273,12 @@ void dense_matrix< T >::QR_decomposition()
 
 	if( m_rows < m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_rows < m_cols" );
+
+	if( scaling )
+		cols_scaling();
+	else
+		m_scalars.resize( m_cols, 1.0 );
+
 
 	const auto max_steps = std::min( m_rows - 1, m_cols );
 
@@ -381,6 +387,9 @@ void dense_matrix< T >::solve_QR( std::vector< DT >& x, const std::vector< DT >&
 
 		x[ r ] = ( x[ r ] - sum ) / static_cast< DT >( m_matrix[ r ][ r ] );
 	}
+
+	for( size_t c{ 0 }; c < m_cols; ++c )
+		x[ c ] *= static_cast< DT >( m_scalars[ c ] );
 }
 
 template< typename T >
@@ -439,7 +448,8 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< DT >& x, const 
 	{
 		r[ row ] = DT{};
 		for( size_t col{ row }; col < m_cols; ++col )
-			r[ row ] += ( x[ col ] * static_cast< DT >( m_matrix[ row ][ col ] ) );
+			r[ row ] += ( x[ col ] * static_cast< DT >( m_matrix[ row ][ col ] )
+				/ static_cast< DT >( m_scalars[ col ] ) );
 	}
 
 	for( int step{ max_steps - 1 }; step >= 0; --step )
@@ -448,9 +458,9 @@ void dense_matrix< T >::count_residual_QRx_b( const std::vector< DT >& x, const 
 		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
 			vRx += conjugate( static_cast< DT >( m_matrix[ s ][ step ] ) ) * r[ s ];
 
-		r[ step ] -= static_cast< DT >( m_betas[ step ] * m_v_firsts[ step ] ) * vRx;
+		r[ step ] -= static_cast< DT >( m_betas[ step ] ) * static_cast< DT >( m_v_firsts[ step ] ) * vRx;
 		for( int s{ step + 1 }; s < static_cast< int >( m_rows ); ++s )
-			r[ s ] -= static_cast< DT >( m_betas[ step ] * m_matrix[ s ][ step ] ) * vRx;
+			r[ s ] -= static_cast< DT >( m_betas[ step ] ) * static_cast< DT >( m_matrix[ s ][ step ] ) * vRx;
 	}
 
 	for( size_t row{ 0 }; row < m_rows; ++row )

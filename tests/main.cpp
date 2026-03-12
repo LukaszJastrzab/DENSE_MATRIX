@@ -89,9 +89,15 @@ TYPED_TEST( non_singular_linear_equation, LU_decomposition_scaling )
 	EXPECT_NO_THROW( A.LU_decomposition( true, 4 ) );
 }
 
-TYPED_TEST( non_singular_linear_equation, QR_decomposition )
+TYPED_TEST( non_singular_linear_equation, QR_decomposition_no_scaling )
 {
 	// decompose A=QR using Householder algorithm
-	EXPECT_NO_THROW( A.QR_decomposition() );
+	EXPECT_NO_THROW( A.QR_decomposition( false ) );
+}
+
+TYPED_TEST( non_singular_linear_equation, QR_decomposition_scaling )
+{
+	// decompose A=QR using Householder algorithm
+	EXPECT_NO_THROW( A.QR_decomposition( true ) );
 }
 
