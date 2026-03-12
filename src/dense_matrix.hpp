@@ -44,9 +44,6 @@ public:
 	void set_element( T value, size_t row, size_t col );
 
 	/// it counts value r := Ax - b
-	void count_residual_Ax_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
-	void count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
-	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
@@ -98,6 +95,10 @@ private:
 	void rows_scaling();
 	/// cols scaling
 	void cols_scaling();
+	/// it counts value r := Ax - b for different dynamic state of the matrix
+	void count_residual_Ax_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	void count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 };
 
