@@ -94,8 +94,10 @@ private:
 
 	/// function for pivoting during LU decomposition
 	void choose_pivot( const size_t stage, const size_t search );
-	/// row scaling
-	void row_scaling();
+	/// rows scaling
+	void rows_scaling();
+	/// cols scaling
+	void cols_scaling();
 
 };
 
@@ -178,7 +180,7 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 		pivoting_rows = m_rows;
 
 	if( scaling )
-		row_scaling();
+		rows_scaling();
 	else
 		m_scalars.resize( m_rows, 1.0 );
 
@@ -544,12 +546,11 @@ void dense_matrix< T >::iterative_refinement( std::vector< DT >& x, const std::v
 	}
 }
 
-
 template < typename T >
-void dense_matrix< T >::row_scaling()
+void dense_matrix< T >::rows_scaling()
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
-		throw std::invalid_argument( "dense_matrix< T >::row_scaling: INIT state is required" );
+		throw std::invalid_argument( "dense_matrix< T >::rows_scaling: INIT state is required" );
 
 	double max_scalar{ 0.0 };
 	m_scalars.resize( m_rows, 0.0 );
@@ -568,5 +569,31 @@ void dense_matrix< T >::row_scaling()
 
 		for( size_t col{ 0 }; col < m_cols; ++col )
 			m_matrix[ row ][ col ] *= static_cast< T >( m_scalars[ row ] );
+	}
+}
+
+template < typename T >
+void dense_matrix< T >::cols_scaling()
+{
+	if( m_dynamic_state != DYNAMIC_STATE::INIT )
+		throw std::invalid_argument( "dense_matrix< T >::cols_scaling: INIT state is required" );
+
+	double max_scalar{ 0.0 };
+	m_scalars.resize( m_cols, 0.0 );
+
+	for( size_t col{ 0 }; col < m_cols; ++col )
+	{
+		for( size_t row{ 0 }; row < m_rows; ++row )
+			m_scalars[ col ] += abs_val( m_matrix[ row ][ col ] );
+
+		max_scalar = std::max( max_scalar, m_scalars[ col ] );
+	}
+
+	for( size_t col{ 0 }; col < m_cols; ++col )
+	{
+		m_scalars[ col ] = ( max_scalar / m_scalars[ col ] );
+
+		for( size_t row{ 0 }; row < m_rows; ++row )
+			m_matrix[ row ][ col ] *= static_cast< T >( m_scalars[ col ] );
 	}
 }
