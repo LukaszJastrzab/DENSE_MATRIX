@@ -432,6 +432,8 @@ void dense_matrix< T >::count_residual_LUx_b( const std::vector< DT >& x, const 
 
 		for( size_t col{ 0 }; col < row; ++col )
 			r[ m_p_row[ row ] ] += w[ col ] * static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ col ] ] );
+
+		r[ m_p_row[ row ] ] /= static_cast< DT >( m_scalars[ m_p_row[ row ] ] );
 	}
 }
 
