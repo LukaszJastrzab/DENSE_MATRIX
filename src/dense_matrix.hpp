@@ -32,8 +32,10 @@ public:
 	///destructor
 	~dense_matrix() = default;
 
-	/// double type used in solving / refinement
+	/// double type used by this template
 	using DT = typename double_type< T >::type;
+	/// real type used by this template
+	using RT = typename real_type< T >::type;
 
 	/// defualt assign operator
 	dense_matrix< T >& operator=( const dense_matrix< T >& ) = default;
@@ -267,8 +269,6 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 template< typename T >
 void dense_matrix< T >::QR_decomposition( bool scaling )
 {
-	using real_t = real_type< T >::type;
-
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
 
@@ -306,8 +306,8 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 		// stabilization sign calculation
 		// ==============================
 		double alpha_abs = std::abs( m_matrix[ step ][ step ] );
-		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< real_t >( alpha_abs ) } : T{ -1 } );
-		T sign_norm = sign * T{ static_cast< real_t >( col_norm ) };
+		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< RT >( alpha_abs ) } : T{ -1 } );
+		T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
 		m_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
 
@@ -318,7 +318,7 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 
 		// store additional required by QR decomposition data 
 		// ==================================================
-		m_betas[ step ] = static_cast< real_t >( 2.0 ) / vTv;
+		m_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
 
 
 		// apply the Householder transformation to the remaining submatrix
