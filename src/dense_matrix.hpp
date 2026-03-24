@@ -19,7 +19,8 @@ private:
 		INIT,
 		ITERATIVE,
 		LU_DECOMPOSED,
-		QR_DECOMPOSED
+		QR_DECOMPOSED,
+		QHQ_DECOMPOSED
 	};
 
 public:
@@ -57,6 +58,9 @@ public:
 	void QR_decomposition( bool scaling );
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
 	void solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const;
+
+	/// decomposes matrix "in situ" to QHQ (using Householder) where H is Hessenber form
+	void QHQ_decomposition();
 
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -267,6 +271,81 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 }
 
 template< typename T >
+void dense_matrix< T >::QHQ_decomposition()
+{
+	if( m_dynamic_state != DYNAMIC_STATE::INIT )
+		throw std::invalid_argument( "dense_matrix< T >::QHQ_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
+
+	if( m_rows < m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::QHQ_decomposition() - m_rows < m_cols" );
+
+	const auto max_steps = m_rows - 2;
+
+	// additioanl stored elements needed to recreated Householder vectors v
+	// ====================================================================
+	m_betas.resize( max_steps, T{} );
+	m_v_firsts.resize( max_steps, T{} );
+
+	for( size_t step{ 0 }; step < max_steps; ++step )
+	{
+		double col_norm{ 0.0 };
+		const size_t row_step{ step + 1 };
+
+		// calcualte norm
+		// ==============
+		for( size_t r{ row_step }; r < m_rows; ++r )
+		{
+			double abs_val = std::abs( m_matrix[ r ][ step ] );
+			col_norm += abs_val * abs_val;
+		}
+		col_norm = std::sqrt( col_norm );
+
+		// stabilization sign calculation
+		// ==============================
+		double alpha_abs = std::abs( m_matrix[ row_step ][ step ] );
+		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ row_step ][ step ] ) / T{ static_cast< RT >( alpha_abs ) } : T{ -1 } );
+		T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
+
+		m_v_firsts[ step ] = m_matrix[ row_step ][ step ] - sign_norm;
+
+		T vTv{ conjugate( m_v_firsts[ step ] ) * m_v_firsts[ step ] };
+
+		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
+			vTv += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ step ];
+
+		// store additional required by Q reconstruction
+		// =============================================
+		m_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
+
+		// apply the Householder transformation to the remaining submatrix
+		// only needed operations "in situ"
+		// ===============================================================
+		m_matrix[ row_step ][ step ] = sign_norm;
+
+		//// calculate vTA ( v*A in case of complex )
+		//// ========================================
+		//for( size_t c{ step + 1 }; c < m_cols; ++c )
+		//{
+		//	vTA[ c ] = conjugate( m_v_firsts[ step ] ) * m_matrix[ step ][ c ];
+		//	for( size_t r{ step + 1 }; r < m_rows; ++r )
+		//		vTA[ c ] += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ c ];
+		//}
+
+		//// calculate (I-bvvT)A = A - b(v(vTA))
+		//// ===================================
+		//for( size_t c{ step + 1 }; c < m_cols; ++c )
+		//	m_matrix[ step ][ c ] -= m_betas[ step ] * m_v_firsts[ step ] * vTA[ c ];
+
+		//for( size_t r{ step + 1 }; r < m_rows; ++r )
+		//	for( size_t c{ step + 1 }; c < m_cols; ++c )
+		//		m_matrix[ r ][ c ] -= m_betas[ step ] * m_matrix[ r ][ step ] * vTA[ c ];
+	}
+
+
+	m_dynamic_state = DYNAMIC_STATE::QHQ_DECOMPOSED;
+}
+
+template< typename T >
 void dense_matrix< T >::QR_decomposition( bool scaling )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
@@ -279,7 +358,6 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 		cols_scaling();
 	else
 		m_scalars.resize( m_cols, 1.0 );
-
 
 	const auto max_steps = std::min( m_rows - 1, m_cols );
 

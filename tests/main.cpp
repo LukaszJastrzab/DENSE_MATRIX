@@ -101,3 +101,49 @@ TYPED_TEST( non_singular_linear_equation, QR_decomposition_scaling )
 	EXPECT_NO_THROW( A.QR_decomposition( true ) );
 }
 
+
+template< typename T >
+class eigenvalues_test : public ::testing::Test
+{
+protected:
+	// double type used in solving / refinement
+	using DT = typename double_type< T >::type;
+
+	// tested matrix
+	dense_matrix< T > A;
+
+	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
+
+	virtual size_t get_mx_size() { return 50; }
+
+	void SetUp() override
+	{
+		if( std::is_same_v< real_type< T >::type, double> )
+		{
+			low_val = 0.00001;
+			high_val = 10000.0;
+			eps = eps_double;
+		}
+
+		// tested matrix
+		A.init( get_mx_size(), get_mx_size() );
+
+		// randomize queation data
+		for( size_t row{ 0 }; row < get_mx_size(); ++row )
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
+	}
+
+	void TearDown() override
+	{
+		EXPECT_TRUE( true );
+	}
+};
+
+TYPED_TEST_SUITE( eigenvalues_test, test_types );
+
+TYPED_TEST( eigenvalues_test, QHQ_decomposition )
+{
+	// decompose A=QR using Householder algorithm
+	EXPECT_NO_THROW( A.QHQ_decomposition() );
+}
