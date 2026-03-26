@@ -20,7 +20,8 @@ private:
 		ITERATIVE,
 		LU_DECOMPOSED,
 		QR_DECOMPOSED,
-		QHQ_DECOMPOSED
+		QHQ_DECOMPOSED,
+		QUASI_QR
 	};
 
 public:
@@ -61,6 +62,8 @@ public:
 
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
+	/// computes eqigen values using QR algorithm
+	void compute_eigenvalues_QR( std::vector< DT >& l );
 
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -177,9 +180,8 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
-
-	if( m_rows < m_cols )
-		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: m_rows < m_cols" );
+	if( m_rows != m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: m_rows != m_cols" );
 
 	// 0 means max pivoting strategy ( search through all active parts of active rows )
 	// ================================================================================
@@ -231,13 +233,15 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 {
 	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
 		throw std::invalid_argument( " dense_matrix< T >::solve_LU: LU_decomposition is needed before" );
-
-	if( m_cols > m_rows )
-		throw std::invalid_argument( " dense_matrix< T >::solve_LU: m_cols > m_rows" );
+	if( m_cols != m_rows )
+		throw std::invalid_argument( " dense_matrix< T >::solve_LU: m_cols != m_rows" );
 
 	const size_t max_step{ std::min( m_rows - 1, m_cols ) };
-	std::vector< DT > y_alloc;
 
+	if ( x.size() < m_cols )
+		x.resize( m_cols );
+
+	std::vector< DT > y_alloc;
 	if( y == nullptr )
 	{
 		y_alloc.resize( m_rows );
@@ -275,9 +279,8 @@ void dense_matrix< T >::QHQ_decomposition()
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::QHQ_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
-
-	if( m_rows < m_cols )
-		throw std::invalid_argument( "dense_matrix< T >::QHQ_decomposition() - m_rows < m_cols" );
+	if( m_rows != m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::QHQ_decomposition() - m_rows != m_cols" );
 
 	const auto max_steps = m_rows - 2;
 
@@ -401,13 +404,72 @@ void dense_matrix< T >::QHQ_decomposition()
 
 
 template< typename T >
+void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
+{
+	if( m_dynamic_state == DYNAMIC_STATE::INIT )
+		QHQ_decomposition();
+	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
+		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
+
+	const auto max_steps = std::min( m_rows - 1, m_cols );
+
+	for( int i{ 0 }; i < 10; ++i )
+	{
+		std::vector< T > qr_betas( max_steps, T{} );
+		std::vector< T > qr_v_firsts( max_steps, T{} );
+		std::vector< T > vTA( m_cols, T{} );
+
+		// QR decompostion
+		// ===============
+		for( size_t step{ 0 }; step < max_steps; ++step )
+		{
+			const size_t nstep{ step + 1 };
+
+			double abs_v0 = abs_val( m_matrix[ step ][ step ] );
+			double abs_v1 = abs_val( m_matrix[ nstep ][ step ] );
+			double col_norm{ std::sqrt( abs_v0 * abs_v0 + abs_v1 * abs_v1 ) };
+
+			T sign = ( abs_v0 != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< RT >( abs_v0 ) } : T{ -1 } );
+			T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
+
+			qr_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
+			const auto v1{ qr_v_firsts[ step ] };
+			const auto v1T{ conjugate( v1 ) };
+
+			T vTv{ v1 * v1T };
+			for( size_t r{ nstep }; r < m_rows; ++r )
+				vTv += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ step ];
+
+			qr_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
+			const auto beta{ qr_betas[ step ] };
+
+			m_matrix[ step ][ step ] = sign_norm;
+
+			for( size_t c{ nstep }; c < m_cols; ++c )
+				vTA[ c ] = v1T * m_matrix[ step ][ c ] + conjugate( m_matrix[ nstep ][ step ] ) * m_matrix[ nstep ][ c ];
+
+			for( size_t c{ nstep }; c < m_cols; ++c )
+			{
+				m_matrix[ step ][ c ] -= beta * v1 * vTA[ c ];
+				m_matrix[ nstep ][ c ] -= beta * m_matrix[ nstep ][ step ] * vTA[ c ];
+			}
+		}
+
+		// RQ multiplication
+		// =================
+		//...
+	}
+
+	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
+}
+
+template< typename T >
 void dense_matrix< T >::QR_decomposition( bool scaling )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
-
-	if( m_rows < m_cols )
-		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_rows < m_cols" );
+	if( m_rows != m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_rows != m_cols" );
 
 	if( scaling )
 		cols_scaling();
@@ -491,7 +553,6 @@ void dense_matrix< T >::solve_QR( std::vector< DT >& x, const std::vector< DT >&
 {
 	if( b.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR - b.size() != m_rows" );
-
 	if( m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::solve_QR() - m_dynamic_state != DYNAMIC_STATE::QR_DECOMPOSED" );
 
@@ -506,9 +567,9 @@ void dense_matrix< T >::solve_QR( std::vector< DT >& x, const std::vector< DT >&
 		for( size_t r{ step + 1 }; r < m_rows; ++r )
 			vTb += conjugate( static_cast< DT >( m_matrix[ r ][ step ] ) ) * x[ r ];
 
-		x[ step ] -= static_cast< DT >( m_betas[ step ] * m_v_firsts[ step ] ) * vTb;
+		x[ step ] -= static_cast< DT >( m_betas[ step ] ) * static_cast< DT >( m_v_firsts[ step ] ) * vTb;
 		for( size_t r{ step + 1 }; r < m_rows; ++r )
-			x[ r ] -= static_cast< DT >( m_betas[ step ] * m_matrix[ r ][ step ] ) * vTb;
+			x[ r ] -= static_cast< DT >( m_betas[ step ] ) * static_cast< DT >( m_matrix[ r ][ step ] ) * vTb;
 	}
 
 	// then solve Rx = Q^T * b by back substitution
@@ -628,8 +689,8 @@ void dense_matrix< T >::count_residual_vector( const std::vector< DT >& x, const
 template < typename T >
 void dense_matrix< T >::iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig ) const
 {
-	if( m_rows < m_cols )
-		throw std::exception( "dense_matrix< T >::iterative_refinement - m_rows < m_cols" );
+	if( m_rows != m_cols )
+		throw std::exception( "dense_matrix< T >::iterative_refinement - m_rows != m_cols" );
 
 	const size_t N = m_rows;
 
@@ -696,7 +757,7 @@ template < typename T >
 void dense_matrix< T >::rows_scaling()
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
-		throw std::invalid_argument( "dense_matrix< T >::rows_scaling: INIT state is required" );
+		throw std::invalid_argument( "dense_matrix< T >::rows_scaling: m_dynamic_state != DYNAMIC_STATE::INIT" );
 
 	double max_scalar{ 0.0 };
 	m_scalars.resize( m_rows, 0.0 );
@@ -722,7 +783,7 @@ template < typename T >
 void dense_matrix< T >::cols_scaling()
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
-		throw std::invalid_argument( "dense_matrix< T >::cols_scaling: INIT state is required" );
+		throw std::invalid_argument( "dense_matrix< T >::cols_scaling: m_dynamic_state != DYNAMIC_STATE::INIT" );
 
 	double max_scalar{ 0.0 };
 	m_scalars.resize( m_cols, 0.0 );

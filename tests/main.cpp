@@ -112,9 +112,11 @@ protected:
 	// tested matrix
 	dense_matrix< T > A;
 
+	std::vector< DT > l;
+
 	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
-	virtual size_t get_mx_size() { return 6; }
+	virtual size_t get_mx_size() { return 3; }
 
 	void SetUp() override
 	{
@@ -140,10 +142,13 @@ protected:
 	}
 };
 
-TYPED_TEST_SUITE( eigenvalues_test, test_types );
+using test_types2 = ::testing::Types< complex< float >, complex< double > >;
+
+TYPED_TEST_SUITE( eigenvalues_test, test_types2 );
 
 TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 {
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l ) );
 }
