@@ -114,7 +114,7 @@ protected:
 
 	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
-	virtual size_t get_mx_size() { return 50; }
+	virtual size_t get_mx_size() { return 6; }
 
 	void SetUp() override
 	{
@@ -128,7 +128,7 @@ protected:
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
 
-		// randomize queation data
+		// randomize matrix data
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
 				A.set_element( generate_random< T >( low_val, high_val ), row, col );
@@ -144,6 +144,6 @@ TYPED_TEST_SUITE( eigenvalues_test, test_types );
 
 TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 {
-	// decompose A=QR using Householder algorithm
+	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
 }

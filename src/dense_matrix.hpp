@@ -59,7 +59,7 @@ public:
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
 	void solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const;
 
-	/// decomposes matrix "in situ" to QHQ (using Householder) where H is Hessenber form
+	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 
 	/// Method improves the accuracy of the solution
@@ -286,6 +286,8 @@ void dense_matrix< T >::QHQ_decomposition()
 	m_betas.resize( max_steps, T{} );
 	m_v_firsts.resize( max_steps, T{} );
 
+	std::vector< T > Av( m_rows, T{} ), vTA( m_cols, T{} );
+
 	for( size_t step{ 0 }; step < max_steps; ++step )
 	{
 		double col_norm{ 0.0 };
@@ -295,55 +297,108 @@ void dense_matrix< T >::QHQ_decomposition()
 		// ==============
 		for( size_t r{ row_step }; r < m_rows; ++r )
 		{
-			double abs_val = std::abs( m_matrix[ r ][ step ] );
-			col_norm += abs_val * abs_val;
+			double abs_v = abs_val( m_matrix[ r ][ step ] );
+			col_norm += abs_v * abs_v;
 		}
 		col_norm = std::sqrt( col_norm );
 
 		// stabilization sign calculation
 		// ==============================
-		double alpha_abs = std::abs( m_matrix[ row_step ][ step ] );
+		double alpha_abs = abs_val( m_matrix[ row_step ][ step ] );
 		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ row_step ][ step ] ) / T{ static_cast< RT >( alpha_abs ) } : T{ -1 } );
 		T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
 		m_v_firsts[ step ] = m_matrix[ row_step ][ step ] - sign_norm;
+		const auto v1{ m_v_firsts[ step ] };
+		const auto v1T{ conjugate( v1 ) };
 
-		T vTv{ conjugate( m_v_firsts[ step ] ) * m_v_firsts[ step ] };
-
+		T vTv{ v1T * v1 };
 		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
 			vTv += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ step ];
 
 		// store additional required by Q reconstruction
 		// =============================================
 		m_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
+		const auto beta{ m_betas[ step ] };
 
-		// apply the Householder transformation to the remaining submatrix
+		// calculate Av
+		//=============
+		for( size_t r{ 0 }; r < m_rows; ++r )
+		{
+			Av[ r ] = m_matrix[ r ][ row_step ] * v1;
+			for( size_t c{ row_step + 1 }; c < m_cols; ++c )
+				Av[ r ] += m_matrix[ r ][ c ] * m_matrix[ c ][ step ];
+		}
+
+		// calculate vTA ( v*A in case of complex )
+		// ========================================
+		for( size_t c{ step }; c < m_cols; ++c )
+		{
+			vTA[ c ] = v1T * m_matrix[ row_step ][ c ];
+			for( size_t r{ row_step + 1 }; r < m_rows; ++r )
+				vTA[ c ] += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ c ];
+		}
+
+		// alpha = v*Av
+		// ============
+		T alpha{ v1T * Av[ row_step ] };
+		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
+			alpha += conjugate( m_matrix[ r ][ step ] ) * Av[ r ];
+
+		// apply the Householder transformation QAQ to the remaining submatrix
 		// only needed operations "in situ"
-		// ===============================================================
+		// ===================================================================
 		m_matrix[ row_step ][ step ] = sign_norm;
 
-		//// calculate vTA ( v*A in case of complex )
-		//// ========================================
-		//for( size_t c{ step + 1 }; c < m_cols; ++c )
-		//{
-		//	vTA[ c ] = conjugate( m_v_firsts[ step ] ) * m_matrix[ step ][ c ];
-		//	for( size_t r{ step + 1 }; r < m_rows; ++r )
-		//		vTA[ c ] += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ c ];
-		//}
+		// update those part of matrix that are changed only by right mult by QT
+		// =====================================================================
+		for( size_t r{ 0 }; r < row_step; ++r )
+		{
+			const auto Av_{ Av[ r ] };
+			m_matrix[ r ][ row_step ] -= beta * Av_ * v1T;
 
-		//// calculate (I-bvvT)A = A - b(v(vTA))
-		//// ===================================
-		//for( size_t c{ step + 1 }; c < m_cols; ++c )
-		//	m_matrix[ step ][ c ] -= m_betas[ step ] * m_v_firsts[ step ] * vTA[ c ];
+			for( size_t c{ row_step + 1 }; c < m_cols; ++c )
+				m_matrix[ r ][ c ] -= beta * Av_ * conjugate( m_matrix[ c ][ step ] );
+		}
 
-		//for( size_t r{ step + 1 }; r < m_rows; ++r )
-		//	for( size_t c{ step + 1 }; c < m_cols; ++c )
-		//		m_matrix[ r ][ c ] -= m_betas[ step ] * m_matrix[ r ][ step ] * vTA[ c ];
+		// update left-upper corner of submatrix
+		// =====================================
+		m_matrix[ row_step ][ row_step ] -= beta * ( v1 * vTA[ row_step ] +	Av[ row_step ] * v1T - beta * alpha * v1 * v1T );
+
+		// update fiest modificated sub row
+		// ================================
+		for( size_t c{ row_step + 1 }; c < m_cols; ++c )
+		{
+			const auto v1T{ conjugate( m_matrix[ c ][ step ] ) };
+			m_matrix[ row_step ][ c ] -= beta * ( v1 * vTA[ c ] + Av[ row_step ] * v1T - beta * alpha * v1 * v1T );
+		}
+
+		// update fiest modificated sub col
+		// ================================
+		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
+		{
+			const auto v1{ m_matrix[ r ][ step ] };
+			m_matrix[ r ][ row_step ] -= beta * ( v1 * vTA[ row_step ] + Av[ r ] * v1T - beta * alpha * v1 * v1T );
+		}
+
+		// update rest part of sub matrix
+		// ==============================
+		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
+		{
+			const auto v1{ m_matrix[ r ][ step ] };
+			const auto Av_{ Av[ r ] };
+
+			for( size_t c{ row_step + 1 }; c < m_cols; ++c )
+			{
+				const auto v1T{ conjugate( m_matrix[ c ][ step ] ) };
+				m_matrix[ r ][ c ] -= beta * ( v1 * vTA[ c ] + Av_ * v1T - beta * alpha * v1 * v1T );
+			}
+		}
 	}
-
 
 	m_dynamic_state = DYNAMIC_STATE::QHQ_DECOMPOSED;
 }
+
 
 template< typename T >
 void dense_matrix< T >::QR_decomposition( bool scaling )
@@ -376,14 +431,14 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 		// ==============
 		for( size_t r{ step }; r < m_rows; ++r )
 		{
-			double abs_val = std::abs( m_matrix[ r ][ step ] );
-			col_norm += abs_val * abs_val;
+			double abs_v = abs_val( m_matrix[ r ][ step ] );
+			col_norm += abs_v * abs_v;
 		}
 		col_norm = std::sqrt( col_norm );
 
 		// stabilization sign calculation
 		// ==============================
-		double alpha_abs = std::abs( m_matrix[ step ][ step ] );
+		double alpha_abs = abs_val( m_matrix[ step ][ step ] );
 		T sign = ( alpha_abs != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< RT >( alpha_abs ) } : T{ -1 } );
 		T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
@@ -476,7 +531,7 @@ void dense_matrix< T >::count_residual_Ax_b( const std::vector< DT >& x, const s
 {
 	if( x.size() != m_cols || b.size() != m_rows || r.size() != m_rows )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - x.size() != m_cols || b.size() != m_rows || r.size() != m_rows" );
-	if ( m_dynamic_state != DYNAMIC_STATE::INIT )
+	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::count_residual_Ax_b - m_dynamic_state != DYNAMIC_STATE::INIT" );
 
 	for( size_t row{ 0 }; row < m_rows; ++row )
@@ -584,7 +639,7 @@ void dense_matrix< T >::iterative_refinement( std::vector< DT >& x, const std::v
 
 	size_t iteration = 0;
 
-	if ( A_orig != nullptr )
+	if( A_orig != nullptr )
 		A_orig->count_residual_vector( x, b, r );
 	else
 		count_residual_vector( x, b, r );
