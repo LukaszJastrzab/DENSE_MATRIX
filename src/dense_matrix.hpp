@@ -68,6 +68,9 @@ public:
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
 
+	/// subtraction operator
+	template< typename U, typename V >
+	friend dense_matrix< std::common_type_t< U, V > > operator-( const dense_matrix< U >& a, const dense_matrix< V >& b );
 	/// mult operator that mutliplise matrix A by vector x
 	template< typename U >
 	friend std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& x );
@@ -133,6 +136,24 @@ void dense_matrix< T >::set_element( T value, size_t row, size_t col )
 		throw std::out_of_range( "dense_matrix< T >::set_element - row >= m_rows || col >= m_cols" );
 
 	m_matrix[ row ][ col ] = value;
+}
+
+
+template< typename U, typename V >
+dense_matrix< std::common_type_t< U, V > > operator-( const dense_matrix< U >& a, const dense_matrix< V >& b )
+{
+	if ( a.m_rows != b.m_rows || a.m_cols != b.m_cols )
+		throw std::invalid_argument( "dense_matrix: operator- - a.m_rows != b.m_rows || a.m_cols != b.m_cols" );
+
+	using R = std::common_type_t< U, V >;
+
+	dense_matrix< R > result( a.m_rows, a.m_cols );
+
+	for( size_t r{ 0 }; r < a.m_rows; ++r )
+		for( size_t c{ 0 }; c < a.m_cols; ++c )
+			result.set_element( static_cast< R >( a.m_matrix[ r ][ c ] ) - static_cast< R >( b.m_matrix[ r ][ c ] ), r, c );
+
+	return result;
 }
 
 template< typename U >
@@ -406,6 +427,8 @@ void dense_matrix< T >::QHQ_decomposition()
 template< typename T >
 void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 {
+	if( m_rows != m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_rows != m_cols" );
 	if( m_dynamic_state == DYNAMIC_STATE::INIT )
 		QHQ_decomposition();
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
@@ -413,7 +436,9 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 
 	const auto max_steps = std::min( m_rows - 1, m_cols );
 
-	for( int i{ 0 }; i < 10; ++i )
+	l.resize( m_cols, T{} );
+
+	for( int i{ 0 }; i < 1000; ++i )
 	{
 		std::vector< T > qr_betas( max_steps, T{} );
 		std::vector< T > qr_v_firsts( max_steps, T{} );
@@ -433,12 +458,10 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 			T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
 			qr_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
-			const auto v1{ qr_v_firsts[ step ] };
-			const auto v1T{ conjugate( v1 ) };
+			const T v[ 2 ]{ qr_v_firsts[ step ], m_matrix[ nstep ][ step ] };
+			const T vT[ 2 ]{ conjugate( v[ 0 ] ), conjugate( v[ 1 ] ) };
 
-			T vTv{ v1 * v1T };
-			for( size_t r{ nstep }; r < m_rows; ++r )
-				vTv += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ step ];
+			T vTv{ v[ 0 ] * vT[ 0 ] + v[ 1 ] * vT[ 1 ] };
 
 			qr_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
 			const auto beta{ qr_betas[ step ] };
@@ -446,19 +469,45 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 			m_matrix[ step ][ step ] = sign_norm;
 
 			for( size_t c{ nstep }; c < m_cols; ++c )
-				vTA[ c ] = v1T * m_matrix[ step ][ c ] + conjugate( m_matrix[ nstep ][ step ] ) * m_matrix[ nstep ][ c ];
+				vTA[ c ] = vT[ 0 ] * m_matrix[ step ][ c ] + vT[ 1 ] * m_matrix[ nstep ][ c ];
 
 			for( size_t c{ nstep }; c < m_cols; ++c )
 			{
-				m_matrix[ step ][ c ] -= beta * v1 * vTA[ c ];
-				m_matrix[ nstep ][ c ] -= beta * m_matrix[ nstep ][ step ] * vTA[ c ];
+				m_matrix[ step ][ c ] -= beta * v[ 0 ] * vTA[ c ];
+				m_matrix[ nstep ][ c ] -= beta * v[ 1 ] * vTA[ c ];
 			}
 		}
 
+		std::vector< T > Rv( m_rows, T{} );
+
 		// RQ multiplication
 		// =================
-		//...
+		for( size_t step{ 0 }; step < max_steps; ++step )
+		{
+			const size_t nstep{ step + 1 };
+			const size_t c1{ step }, c2{ step + 1 };
+			const T v[ 2 ]{ qr_v_firsts[ step ], m_matrix[ c2 ][ step ] };
+			const T vT[ 2 ]{ conjugate( v[ 0 ] ), conjugate( v[ 1 ] ) };
+			const auto beta{ qr_betas[ step ] };
+
+			for( size_t r{ 0 }; r < nstep; ++r )
+			{
+				Rv[ r ] = m_matrix[ r ][ c2 ] * v[ 1 ];
+				Rv[ r ] += m_matrix[ r ][ c1 ] * v[ 0 ];
+			}
+			Rv[ nstep ] = m_matrix[ nstep ][ c2 ] * v[ 1 ];
+
+			for( size_t r{ 0 }; r < nstep; ++r )
+				for( size_t c{ step }; c <= nstep; ++c )
+					m_matrix[ r ][ c ] -= beta * Rv[ r ] * vT[ c - step ];
+
+			m_matrix[ nstep ][ step ] = -beta * Rv[ nstep ] * vT[ 0 ];
+			m_matrix[ nstep ][ nstep ] -= beta * Rv[ nstep ] * vT[ 1 ];
+		}
 	}
+
+	for( size_t rc{ 0 }; rc < m_cols; ++rc )
+		l[ rc ] = m_matrix[ rc ][ rc ];
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
 }

@@ -110,13 +110,14 @@ protected:
 	using DT = typename double_type< T >::type;
 
 	// tested matrix
-	dense_matrix< T > A;
+	dense_matrix< T > A, A_, Il;
 
-	std::vector< DT > l;
+	// needed vectors
+	vector< DT > b, x, r, l;
 
 	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
-	virtual size_t get_mx_size() { return 3; }
+	virtual size_t get_mx_size() { return 5; }
 
 	void SetUp() override
 	{
@@ -127,13 +128,20 @@ protected:
 			eps = eps_double;
 		}
 
+		b.resize( get_mx_size(), DT{} );
+		r.resize( get_mx_size(), DT{} );
+		x.resize( get_mx_size(), DT{} );
+
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
+		Il.init( get_mx_size(), get_mx_size() );
 
 		// randomize matrix data
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
 				A.set_element( generate_random< T >( low_val, high_val ), row, col );
+
+		A_ = A;
 	}
 
 	void TearDown() override
@@ -151,4 +159,18 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l ) );
+
+	for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+		Il.set_element( l[ 0 ], rc, rc );
+
+	auto A_l = A_ - Il;
+
+	EXPECT_NO_THROW( A_l.QR_decomposition( false ) );
+
+	A_l.solve_QR( x, b );
+	A_l.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
+
+
+
+	int test = 7;
 }
