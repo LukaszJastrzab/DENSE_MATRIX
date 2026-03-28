@@ -52,8 +52,10 @@ public:
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
 	void LU_decomposition( bool scaling, size_t pivoting_rows = 0 );
-	/// Method solves LU problem (LU_decomposition is needed to call before)
+	/// method solves LU problem (LU_decomposition is needed to call before)
 	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
+	/// method computes determinant using LU decomposition
+	typename double_type< T >::type det() const;
 
 	/// decomposes matrix "in situ" to factors QR using Householder method
 	void QR_decomposition( bool scaling );
@@ -63,7 +65,7 @@ public:
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 	/// computes eqigen values using QR algorithm
-	void compute_eigenvalues_QR( std::vector< DT >& l );
+	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const double stop_acc );
 
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -87,10 +89,12 @@ private:
 	/// matrix data
 	std::vector< std::vector< T > > m_matrix;
 
+	/// sing for determinant
+	int m_dsign{ 1 };
+
 	/// for QR decomposition
 	std::vector< T > m_betas;
 	std::vector< T > m_v_firsts;
-
 
 	/// row permutation
 	std::vector< size_t > m_p_row;		/// under i-th index : original row number
@@ -100,7 +104,14 @@ private:
 	/// row / column scaling parameters
 	std::vector< double > m_scalars;
 
+	/// accuracy used for finding complex blocks in QR algrithm
+	inline static const double IMAG_ACC = std::is_same_v< typename real_type< T >::type, double > ? 1e-6 : 1e-3;
+	inline static const double DEFLATION_ACC= std::is_same_v< typename real_type< T >::type, double > ? 1e-8 : 1e-4;
 
+	/// Function permuts row lying on pos1 position with row lying on pos2 position
+	void permute_rows( size_t pos1, size_t pos2 );
+	/// Function permuts column lying on pos1 position with column lying on pos2 position
+	void permute_cols( size_t pos1, size_t pos2 );
 	/// function for pivoting during LU decomposition
 	void choose_pivot( const size_t stage, const size_t search );
 	/// rows scaling
@@ -111,6 +122,10 @@ private:
 	void count_residual_Ax_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	void count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
+	/// method dumps eigen values during QR algorithm
+	void QR_get_eigenvalues( std::vector< std::complex< double > >& l );
+	/// stop condition for eigen values QR algorithm
+	double QR_stop_accuracy() const;
 
 };
 
@@ -172,6 +187,24 @@ std::vector< U > operator*( const dense_matrix< U >& A, const std::vector< U >& 
 }
 
 template < typename T >
+void dense_matrix< T >::permute_rows( size_t pos1, size_t pos2 )
+{
+	if( pos1 != pos2 )
+		m_dsign = -m_dsign;
+
+	std::swap( m_p_row[ pos1 ], m_p_row[ pos2 ] );
+}
+
+template < typename T >
+void dense_matrix< T >::permute_cols( size_t pos1, size_t pos2 )
+{
+	if( pos1 != pos2 )
+		m_dsign = -m_dsign;
+
+	std::swap( m_p_col[ pos1 ], m_p_col[ pos2 ] );
+}
+
+template < typename T >
 void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 {
 	const size_t LastSearch = ( step + search < m_cols ? step + search : m_cols );
@@ -192,8 +225,8 @@ void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 			}
 		}
 
-	std::swap( m_p_row[ ROW ], m_p_row[ step ] );
-	std::swap( m_p_col[ COL ], m_p_col[ step ] );
+	permute_rows( ROW, step );
+	permute_cols( COL, step );
 }
 
 template< typename T >
@@ -252,10 +285,10 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 template< typename T >
 void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y ) const
 {
-	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
-		throw std::invalid_argument( " dense_matrix< T >::solve_LU: LU_decomposition is needed before" );
 	if( m_cols != m_rows )
 		throw std::invalid_argument( " dense_matrix< T >::solve_LU: m_cols != m_rows" );
+	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
+		throw std::invalid_argument( " dense_matrix< T >::solve_LU: LU_decomposition is needed before" );
 
 	const size_t max_step{ std::min( m_rows - 1, m_cols ) };
 
@@ -293,6 +326,22 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 
 		x[ m_p_col[ row ] ] /= static_cast< DT >( m_matrix[ m_p_row[ row ] ][ m_p_col[ row ] ] );
 	}
+}
+
+template< typename T >
+typename double_type< T >::type dense_matrix< T >::det() const
+{
+	if( m_cols != m_rows )
+		throw std::invalid_argument( " dense_matrix< T >::det: m_cols != m_rows" );
+	if( m_dynamic_state != DYNAMIC_STATE::LU_DECOMPOSED )
+		throw std::invalid_argument( " dense_matrix< T >::det: LU_decomposition is needed before" );
+
+	DT result{ static_cast< DT >( m_dsign ) };
+
+	for( size_t rc{ 0 }; rc < m_rows; ++rc )
+		result *= ( static_cast< DT >( m_matrix[ m_p_row[ rc ] ][ m_p_col[ rc ] ] ) / static_cast< DT >( m_scalars[ m_p_row[ rc ] ] ) );
+
+	return result;
 }
 
 template< typename T >
@@ -340,8 +389,12 @@ void dense_matrix< T >::QHQ_decomposition()
 		for( size_t r{ row_step + 1 }; r < m_rows; ++r )
 			vTv += conjugate( m_matrix[ r ][ step ] ) * m_matrix[ r ][ step ];
 
-		// store additional required by Q reconstruction
-		// =============================================
+		if( vTv == T{ 0 } )
+		{
+			m_betas[ step ] = T{ 0 };
+			continue;
+		}
+
 		m_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
 		const auto beta{ m_betas[ step ] };
 
@@ -423,9 +476,59 @@ void dense_matrix< T >::QHQ_decomposition()
 	m_dynamic_state = DYNAMIC_STATE::QHQ_DECOMPOSED;
 }
 
+template< typename T >
+void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > >& l )
+{
+	size_t c{ 0 };
+	for( ; c < m_cols - 1; ++c )
+	{		
+		const T val{ m_matrix[ c ][ c ] };
+
+		const double real{ get_real( val ) };
+		const double imag{ get_real( m_matrix[ c + 1 ][ c ] ) };
+
+		const double sub_diag{ abs_val( m_matrix[ c + 1 ][ c ] ) };
+		const double over_diag{ abs_val( m_matrix[ c ][ c + 1 ] ) };
+
+		const double imag_acc{ abs_val( sub_diag - over_diag ) };
+
+		if( imag_acc <= IMAG_ACC && ( sub_diag > 0 || over_diag > 0 ) )
+		{
+			l[ c ] = std::complex< double >( real, imag );
+			l[ ++c ] = std::complex< double >( real, -imag );
+		}
+		else
+			l[ c ] = std::complex< double >( val );
+	}
+	
+	if ( c < m_cols )
+		l[ c ] = std::complex< double >( m_matrix[ c ][ c ] );
+}
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
+double dense_matrix< T >::QR_stop_accuracy() const
+{
+	double acc{ 0.0 };
+
+	for( size_t c{ 0 }; c < m_cols - 1; ++c )
+	{
+		const double sub_diag{ abs_val( m_matrix[ c + 1 ][ c ] ) };
+		const double over_diag{ abs_val( m_matrix[ c ][ c + 1 ] ) };
+
+		const double imag_acc{ abs_val( sub_diag - over_diag ) };
+
+		if( imag_acc <= IMAG_ACC )
+			acc = max( acc, imag_acc );
+		else
+			acc = max( acc, abs_val( sub_diag ) );
+	}
+
+	return acc;
+}
+
+
+template< typename T >
+void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const double stop_acc )
 {
 	if( m_rows != m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_rows != m_cols" );
@@ -434,14 +537,35 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
 
-	const auto max_steps = std::min( m_rows - 1, m_cols );
+	const auto max_steps = m_rows - 1;
+	double acc{ std::numeric_limits< double >::max() };
 
-	l.resize( m_cols, T{} );
+	l.resize( m_rows, std::complex< double >{} );
 
-	for( int i{ 0 }; i < 1000; ++i )
+	for( int iter{ 0 }; iter < 10000 && acc > stop_acc; ++iter )
 	{
+		// deflection
+		// ==========
+		for( size_t i = 0; i < m_rows - 1; ++i )
+		{
+			const double a{ abs_val( get_real( m_matrix[ i ][ i ] ) ) },
+				b{ abs_val( get_real( m_matrix[ i + 1 ][ i + 1 ] ) ) },
+				c{ abs_val( m_matrix[ i + 1 ][ i ] ) };
+
+			if( c <= DEFLATION_ACC * ( a + b ) )
+				m_matrix[ i + 1 ][ i ] = T{};
+		}
+
+		// Rayleigh shifting
+		// =================
+		T mu{ m_matrix[ max_steps ][ max_steps ] };
+
+		for( size_t i = 0; i < m_rows; ++i )
+			m_matrix[ i ][ i ] -= mu;
+
 		std::vector< T > qr_betas( max_steps, T{} );
 		std::vector< T > qr_v_firsts( max_steps, T{} );
+		std::vector< T > qr_v_second( max_steps, T{} );
 		std::vector< T > vTA( m_cols, T{} );
 
 		// QR decompostion
@@ -450,23 +574,35 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 		{
 			const size_t nstep{ step + 1 };
 
-			double abs_v0 = abs_val( m_matrix[ step ][ step ] );
-			double abs_v1 = abs_val( m_matrix[ nstep ][ step ] );
+			auto v0 = m_matrix[ step ][ step ];
+			auto v1 = m_matrix[ nstep ][ step ];
+
+			double abs_v0 = abs_val( v0 );
+			double abs_v1 = abs_val( v1 );
 			double col_norm{ std::sqrt( abs_v0 * abs_v0 + abs_v1 * abs_v1 ) };
 
-			T sign = ( abs_v0 != 0.0 ? -( m_matrix[ step ][ step ] ) / T{ static_cast< RT >( abs_v0 ) } : T{ -1 } );
+			if( col_norm == 0.0 )
+				continue;
+
+			T sign = ( abs_v0 != 0.0 ? -v0 / T{ static_cast< RT >( abs_v0 ) } : T{ -1 } );
 			T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
-			qr_v_firsts[ step ] = m_matrix[ step ][ step ] - sign_norm;
-			const T v[ 2 ]{ qr_v_firsts[ step ], m_matrix[ nstep ][ step ] };
+			const T v[ 2 ]{ v0 - sign_norm, v1 };
 			const T vT[ 2 ]{ conjugate( v[ 0 ] ), conjugate( v[ 1 ] ) };
+
+			qr_v_firsts[ step ] = v[ 0 ];
+			qr_v_second[ step ] = v[ 1 ];
 
 			T vTv{ v[ 0 ] * vT[ 0 ] + v[ 1 ] * vT[ 1 ] };
 
-			qr_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
-			const auto beta{ qr_betas[ step ] };
+			if( abs_val( vTv ) < 1e-16 )
+				continue;
+
+			const auto beta{ static_cast< RT >( 2.0 ) / vTv };
+			qr_betas[ step ] = beta;
 
 			m_matrix[ step ][ step ] = sign_norm;
+			m_matrix[ nstep ][ step ] = T{};
 
 			for( size_t c{ nstep }; c < m_cols; ++c )
 				vTA[ c ] = vT[ 0 ] * m_matrix[ step ][ c ] + vT[ 1 ] * m_matrix[ nstep ][ c ];
@@ -486,15 +622,13 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 		{
 			const size_t nstep{ step + 1 };
 			const size_t c1{ step }, c2{ step + 1 };
-			const T v[ 2 ]{ qr_v_firsts[ step ], m_matrix[ c2 ][ step ] };
+			const T v[ 2 ]{ qr_v_firsts[ step ], qr_v_second[ step ] };
 			const T vT[ 2 ]{ conjugate( v[ 0 ] ), conjugate( v[ 1 ] ) };
 			const auto beta{ qr_betas[ step ] };
 
 			for( size_t r{ 0 }; r < nstep; ++r )
-			{
-				Rv[ r ] = m_matrix[ r ][ c2 ] * v[ 1 ];
-				Rv[ r ] += m_matrix[ r ][ c1 ] * v[ 0 ];
-			}
+				Rv[ r ] = m_matrix[ r ][ c1 ] * v[ 0 ] + m_matrix[ r ][ c2 ] * v[ 1 ];
+
 			Rv[ nstep ] = m_matrix[ nstep ][ c2 ] * v[ 1 ];
 
 			for( size_t r{ 0 }; r < nstep; ++r )
@@ -504,10 +638,21 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DT >& l )
 			m_matrix[ nstep ][ step ] = -beta * Rv[ nstep ] * vT[ 0 ];
 			m_matrix[ nstep ][ nstep ] -= beta * Rv[ nstep ] * vT[ 1 ];
 		}
-	}
 
-	for( size_t rc{ 0 }; rc < m_cols; ++rc )
-		l[ rc ] = m_matrix[ rc ][ rc ];
+		// Rayleigh shifting back
+		// ======================
+		for( size_t i = 0; i < m_rows; ++i )
+			m_matrix[ i ][ i ] += mu;
+
+		double new_acc{ QR_stop_accuracy() };
+		if( new_acc < acc )
+		{
+			QR_get_eigenvalues( l );
+			acc = new_acc;
+		}
+		//else
+		//	break;
+	}
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
 }

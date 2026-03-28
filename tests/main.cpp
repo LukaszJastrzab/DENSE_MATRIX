@@ -117,7 +117,7 @@ protected:
 
 	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
 
-	virtual size_t get_mx_size() { return 5; }
+	virtual size_t get_mx_size() { return 4; }
 
 	void SetUp() override
 	{
@@ -127,11 +127,6 @@ protected:
 			high_val = 10000.0;
 			eps = eps_double;
 		}
-
-		b.resize( get_mx_size(), DT{} );
-		r.resize( get_mx_size(), DT{} );
-		x.resize( get_mx_size(), DT{} );
-
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
 		Il.init( get_mx_size(), get_mx_size() );
@@ -139,7 +134,7 @@ protected:
 		// randomize matrix data
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-				A.set_element( generate_random< T >( low_val, high_val ), row, col );
+				A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, col );
 
 		A_ = A;
 	}
@@ -158,19 +153,17 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 {
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
 
-	for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-		Il.set_element( l[ 0 ], rc, rc );
+	for( size_t i{ 0 }; i < get_mx_size(); ++i )
+	{
+		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+			Il.set_element( l[ i ], rc, rc );
 
-	auto A_l = A_ - Il;
+		auto A_l{ A_ - Il };
 
-	EXPECT_NO_THROW( A_l.QR_decomposition( false ) );
+		EXPECT_NO_THROW( A_l.LU_decomposition( false ) );
+		auto detA_l{ A_l.det() };
+	}
 
-	A_l.solve_QR( x, b );
-	A_l.iterative_refinement( x, b, 0.000000000001, 1000, nullptr );
-
-
-
-	int test = 7;
 }

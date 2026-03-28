@@ -42,6 +42,23 @@ struct double_type< std::complex< T > >
     using type = std::complex< double >;
 };
 
+template< typename T >
+struct is_complex : std::false_type {};
+
+template< typename T >
+struct is_complex< std::complex< T > > : std::true_type {};
+
+template< typename T >
+inline T get_real( T x )
+{
+    return x;
+}
+
+template< typename T >
+inline T get_real( const std::complex< T >& x )
+{
+    return x.real();
+}
 
 template< typename T >
 #ifdef __CUDACC__
