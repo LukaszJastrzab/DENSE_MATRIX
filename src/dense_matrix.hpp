@@ -105,7 +105,6 @@ private:
 	std::vector< double > m_scalars;
 
 	/// accuracy used for finding complex blocks in QR algrithm
-	inline static const double IMAG_ACC = std::is_same_v< typename real_type< T >::type, double > ? 1e-6 : 1e-3;
 	inline static const double DEFLATION_ACC= std::is_same_v< typename real_type< T >::type, double > ? 1e-8 : 1e-4;
 
 	/// Function permuts row lying on pos1 position with row lying on pos2 position
@@ -124,8 +123,6 @@ private:
 	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	/// method dumps eigen values during QR algorithm
 	void QR_get_eigenvalues( std::vector< std::complex< double > >& l );
-	/// stop condition for eigen values QR algorithm
-	double QR_stop_accuracy() const;
 
 };
 
@@ -479,53 +476,31 @@ void dense_matrix< T >::QHQ_decomposition()
 template< typename T >
 void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > >& l )
 {
-	size_t c{ 0 };
-	for( ; c < m_cols - 1; ++c )
-	{		
-		const T val{ m_matrix[ c ][ c ] };
-
-		const double real{ get_real( val ) };
-		const double imag{ get_real( m_matrix[ c + 1 ][ c ] ) };
-
-		const double sub_diag{ abs_val( m_matrix[ c + 1 ][ c ] ) };
-		const double over_diag{ abs_val( m_matrix[ c ][ c + 1 ] ) };
-
-		const double imag_acc{ abs_val( sub_diag - over_diag ) };
-
-		if( imag_acc <= IMAG_ACC && ( sub_diag > 0 || over_diag > 0 ) )
+	for( size_t i{ 0 }; i < m_cols; )
+	{
+		if( i < m_cols - 1 && abs_val( m_matrix[ i + 1 ][ i ] ) > DEFLATION_ACC )
 		{
-			l[ c ] = std::complex< double >( real, imag );
-			l[ ++c ] = std::complex< double >( real, -imag );
+			// blok 2x2
+			// ========
+			std::complex< double > a{ m_matrix[ i ][ i ] }, b{ m_matrix[ i ][ i + 1 ] },
+				c{ m_matrix[ i + 1 ][ i ] }, d{ m_matrix[ i + 1 ][ i + 1 ] };
+
+			std::complex< double > tr{ a + d };
+			std::complex< double > det{ a * d - b * c };
+			std::complex< double > disc{ std::sqrt( tr * tr - std::complex< double >( 4.0 ) * det ) };
+
+			l[ i ] = ( tr + disc ) / std::complex< double >( 2.0 );
+			l[ i + 1 ] = ( tr - disc ) / std::complex< double >( 2.0 );
+
+			i += 2;
 		}
 		else
-			l[ c ] = std::complex< double >( val );
+		{
+			l[ i ] = std::complex< double >( m_matrix[ i ][ i ] );
+			++i;
+		}
 	}
-	
-	if ( c < m_cols )
-		l[ c ] = std::complex< double >( m_matrix[ c ][ c ] );
 }
-
-template< typename T >
-double dense_matrix< T >::QR_stop_accuracy() const
-{
-	double acc{ 0.0 };
-
-	for( size_t c{ 0 }; c < m_cols - 1; ++c )
-	{
-		const double sub_diag{ abs_val( m_matrix[ c + 1 ][ c ] ) };
-		const double over_diag{ abs_val( m_matrix[ c ][ c + 1 ] ) };
-
-		const double imag_acc{ abs_val( sub_diag - over_diag ) };
-
-		if( imag_acc <= IMAG_ACC )
-			acc = max( acc, imag_acc );
-		else
-			acc = max( acc, abs_val( sub_diag ) );
-	}
-
-	return acc;
-}
-
 
 template< typename T >
 void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const double stop_acc )
@@ -542,7 +517,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 	l.resize( m_rows, std::complex< double >{} );
 
-	for( int iter{ 0 }; iter < 10000 && acc > stop_acc; ++iter )
+	for( int iter{ 0 }; iter < 1000 && acc > stop_acc; ++iter )
 	{
 		// deflection
 		// ==========
@@ -644,14 +619,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 		for( size_t i = 0; i < m_rows; ++i )
 			m_matrix[ i ][ i ] += mu;
 
-		double new_acc{ QR_stop_accuracy() };
-		if( new_acc < acc )
-		{
-			QR_get_eigenvalues( l );
-			acc = new_acc;
-		}
-		//else
-		//	break;
+		QR_get_eigenvalues( l );
 	}
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
