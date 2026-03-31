@@ -132,9 +132,22 @@ protected:
 		Il.init( get_mx_size(), get_mx_size() );
 
 		// randomize matrix data
+		//for( size_t row{ 0 }; row < get_mx_size(); ++row )
+		//	for( size_t col{ 0 }; col < get_mx_size(); ++col )
+		//		A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, col );
+				//A.set_element( generate_random< T >( low_val, high_val ), row, col );
+
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
-			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-				A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, col );
+		{
+			A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, row );
+
+			for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
+			{
+				auto val{ static_cast< T >( generate_random< float >( low_val, high_val ) ) };
+				A.set_element( val, row, col );
+				A.set_element( val, col, row );
+			}
+		}
 
 		A_ = A;
 	}
@@ -153,7 +166,8 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 {
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
+	auto factors = get_factors( A );
+	EXPECT_NO_THROW( factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() ) );
 
 	for( size_t i{ 0 }; i < get_mx_size(); ++i )
 	{
@@ -164,6 +178,22 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 
 		EXPECT_NO_THROW( A_l.LU_decomposition( false ) );
 		auto detA_l{ A_l.det() };
+
+		int test = 7;
 	}
+
+
+	//auto factors = get_factors( A );
+
+	//auto A__ = factors[ 1 ] * factors[ 0 ] * factors[ 2 ];
+
+	//factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() );
+
+
+	//int test = 7;
+
+	//EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
+
+
 
 }
