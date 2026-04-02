@@ -108,14 +108,18 @@ class eigenvalues_test : public ::testing::Test
 protected:
 	// double type used in solving / refinement
 	using DT = typename double_type< T >::type;
+	// real type used in solving / refinement
+	using RT = typename real_type< T >::type;
 
 	// tested matrix
-	dense_matrix< T > A, A_, Il;
+	dense_matrix< T > A;
+	dense_matrix< complex< RT > > A_, Il;
 
 	// needed vectors
-	vector< DT > b, x, r, l;
+	vector< DT > b, x, r;
+	vector< complex< double > > l;
 
-	double low_val{ 0.01 }, high_val{ 10.0 }, eps{ eps_float };
+	double low_val{ 0.01 }, high_val{ 100.0 }, eps{ eps_float };
 
 	virtual size_t get_mx_size() { return 4; }
 
@@ -123,33 +127,35 @@ protected:
 	{
 		if( std::is_same_v< real_type< T >::type, double> )
 		{
-			low_val = 0.00001;
-			high_val = 10000.0;
+			low_val = 0.001;
+			high_val = 1000.0;
 			eps = eps_double;
 		}
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
+		A_.init( get_mx_size(), get_mx_size() );
 		Il.init( get_mx_size(), get_mx_size() );
 
 		// randomize matrix data
-		//for( size_t row{ 0 }; row < get_mx_size(); ++row )
-		//	for( size_t col{ 0 }; col < get_mx_size(); ++col )
-		//		A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, col );
-				//A.set_element( generate_random< T >( low_val, high_val ), row, col );
-
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
-		{
-			A.set_element( static_cast< T >( generate_random< float >( low_val, high_val ) ), row, row );
-
-			for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
 			{
-				auto val{ static_cast< T >( generate_random< float >( low_val, high_val ) ) };
+				auto val{ generate_random< T >( low_val, high_val ) };
 				A.set_element( val, row, col );
-				A.set_element( val, col, row );
+				A_.set_element( static_cast< complex< RT > >( val ), row, col );
 			}
-		}
 
-		A_ = A;
+		//for( size_t row{ 0 }; row < get_mx_size(); ++row )
+		//{
+		//	A.set_element( static_cast< T >( generate_random< RT >( low_val, high_val ) ), row, row );
+
+		//	for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
+		//	{
+		//		auto val{ static_cast< T >( generate_random< T >( low_val, high_val ) ) };
+		//		A.set_element( val, row, col );
+		//		A.set_element( val, col, row );
+		//	}
+		//}
 	}
 
 	void TearDown() override
@@ -158,7 +164,7 @@ protected:
 	}
 };
 
-using test_types2 = ::testing::Types< complex< float >, complex< double > >;
+using test_types2 = ::testing::Types< float, complex< float > >;
 
 TYPED_TEST_SUITE( eigenvalues_test, test_types2 );
 
@@ -166,8 +172,8 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 {
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
-	auto factors = get_factors( A );
-	EXPECT_NO_THROW( factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() ) );
+
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
 
 	for( size_t i{ 0 }; i < get_mx_size(); ++i )
 	{
@@ -183,16 +189,12 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 	}
 
 
+
+
 	//auto factors = get_factors( A );
-
-	//auto A__ = factors[ 1 ] * factors[ 0 ] * factors[ 2 ];
-
-	//factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() );
+	//EXPECT_NO_THROW( factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() ) );
 
 
-	//int test = 7;
-
-	//EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
 
 
 
