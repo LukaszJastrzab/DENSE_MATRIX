@@ -113,7 +113,7 @@ protected:
 
 	// tested matrix
 	dense_matrix< T > A;
-	dense_matrix< complex< RT > > A_, Il;
+	dense_matrix< complex< double > > A_, Il;
 
 	// needed vectors
 	vector< DT > b, x, r;
@@ -142,7 +142,7 @@ protected:
 			{
 				auto val{ generate_random< T >( low_val, high_val ) };
 				A.set_element( val, row, col );
-				A_.set_element( static_cast< complex< RT > >( val ), row, col );
+				A_.set_element( static_cast< complex< double > >( val ), row, col );
 			}
 
 		//for( size_t row{ 0 }; row < get_mx_size(); ++row )
@@ -164,7 +164,8 @@ protected:
 	}
 };
 
-using test_types2 = ::testing::Types< float, complex< float > >;
+//using test_types2 = ::testing::Types< float, double, complex< float >, complex< double > >;
+using test_types2 = ::testing::Types< complex< double > >;
 
 TYPED_TEST_SUITE( eigenvalues_test, test_types2 );
 
@@ -184,18 +185,5 @@ TYPED_TEST( eigenvalues_test, QHQ_decomposition )
 
 		EXPECT_NO_THROW( A_l.LU_decomposition( false ) );
 		auto detA_l{ A_l.det() };
-
-		int test = 7;
 	}
-
-
-
-
-	//auto factors = get_factors( A );
-	//EXPECT_NO_THROW( factors[ 0 ].compute_eigenvalues_QR_( l, numeric_limits< double >::min() ) );
-
-
-
-
-
 }

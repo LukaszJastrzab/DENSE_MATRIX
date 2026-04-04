@@ -113,7 +113,7 @@ private:
 	std::vector< double > m_scalars;
 
 	/// accuracy used for finding complex blocks in QR algrithm
-	inline static const double DEFLATION_ACC= std::is_same_v< typename real_type< T >::type, double > ? 1e-16 : 1e-8;
+	inline static const double DEFLATION_ACC{ std::numeric_limits< RT >::epsilon() };
 
 	/// Function permuts row lying on pos1 position with row lying on pos2 position
 	void permute_rows( size_t pos1, size_t pos2 );
