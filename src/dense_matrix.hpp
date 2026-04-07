@@ -51,7 +51,7 @@ public:
 	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
-	void LU_decomposition( bool scaling, size_t pivoting_rows = 0 );
+	void LU_decomposition( bool scaling, size_t pivoting_rows = 0, RT pivot_acc = std::numeric_limits< RT >::epsilon() );
 	/// method solves LU problem (LU_decomposition is needed to call before)
 	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
 	/// method computes determinant using LU decomposition
@@ -184,7 +184,7 @@ dense_matrix< std::common_type_t< U, V > > operator+( const dense_matrix< U >& A
 template< typename U, typename V >
 dense_matrix< std::common_type_t< U, V > > operator-( const dense_matrix< U >& A, const dense_matrix< V >& B )
 {
-	if ( A.m_rows != B.m_rows || A.m_cols != B.m_cols )
+	if( A.m_rows != B.m_rows || A.m_cols != B.m_cols )
 		throw std::invalid_argument( "dense_matrix: operator- - A.m_rows != B.m_rows || A.m_cols != B.m_cols" );
 
 	using R = std::common_type_t< U, V >;
@@ -293,7 +293,7 @@ void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 }
 
 template< typename T >
-void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
+void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT pivot_acc )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
@@ -327,6 +327,9 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 
 		const auto pivot{ m_matrix[ eliminating_row ][ stage_col ] };
 
+		if( abs_val( pivot ) <= pivot_acc )
+			throw std::runtime_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
+
 		for( size_t row{ step + 1 }; row < m_rows; ++row )
 		{
 			const size_t eliminated_row = m_p_row[ row ];
@@ -342,6 +345,9 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows )
 		}
 	}
 
+	if( abs_val( m_matrix[ m_p_row[ max_steps ] ][ m_p_col[ max_steps ] ] ) <= pivot_acc )
+		throw std::runtime_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
+
 	m_dynamic_state = DYNAMIC_STATE::LU_DECOMPOSED;
 }
 
@@ -355,7 +361,7 @@ void dense_matrix< T >::solve_LU( std::vector< DT >& x, const std::vector< DT >&
 
 	const size_t max_step{ std::min( m_rows - 1, m_cols ) };
 
-	if ( x.size() < m_cols )
+	if( x.size() < m_cols )
 		x.resize( m_cols );
 
 	std::vector< DT > y_alloc;
@@ -503,7 +509,7 @@ void dense_matrix< T >::QHQ_decomposition()
 
 		// update left-upper corner of submatrix
 		// =====================================
-		m_matrix[ row_step ][ row_step ] -= beta * ( v1 * vTA[ row_step ] +	Av[ row_step ] * v1T - beta * alpha * v1 * v1T );
+		m_matrix[ row_step ][ row_step ] -= beta * ( v1 * vTA[ row_step ] + Av[ row_step ] * v1T - beta * alpha * v1 * v1T );
 
 		// update fiest modificated sub row
 		// ================================
@@ -1068,7 +1074,7 @@ std::vector< dense_matrix< U > > get_factors( const dense_matrix< U >& A )
 		factors.push_back( std::move( H ) );
 
 		const auto max_steps = A.m_rows - 2;
-		
+
 		for( size_t step{ 0 }; step < max_steps; ++step )
 		{
 			const size_t nstep{ step + 1 };
