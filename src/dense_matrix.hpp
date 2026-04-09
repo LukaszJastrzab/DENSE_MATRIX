@@ -65,7 +65,7 @@ public:
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 	/// computes eqigen values using QR algorithm
-	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const double stop_acc );
+	void compute_eigenvalues_QR_with_RShift( std::vector< std::complex< double > >& l, const size_t max_it, const double acc = std::numeric_limits< RT >::epsilon() );
 
 	/// Method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -639,16 +639,16 @@ bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift 
 
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const double stop_acc )
+void dense_matrix< T >::compute_eigenvalues_QR_with_RShift( std::vector< std::complex< double > >& l, const size_t max_it, const double acc )
 {
 	if( m_rows != m_cols )
-		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_rows != m_cols" );
+		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR_with_RShift() - m_rows != m_cols" );
 	if( m_dynamic_state == DYNAMIC_STATE::INIT )
 		QHQ_decomposition();
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
-		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR() - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
+		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR_with_RShift() - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
 
-	const auto max_steps = m_rows - 1;
+	const size_t max_steps = static_cast< int >( m_rows ) - 1;
 
 	l.resize( m_rows, std::complex< double >{} );
 
@@ -658,33 +658,35 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 		m_matrix[ i + 2 ][ i ] = T{};
 
 	size_t shift{ 0 };
+	size_t block_end{ max_steps };
 
-	for( int iter{ 0 }; iter < 1000; ++iter )
+	for( size_t iter{ 0 }; iter < max_it; ++iter )
 	{
 		// deflection
 		// ==========
-		for( size_t i{ shift }; i < m_rows - 1; ++i )
+		for( auto i{ shift }; i < m_rows - 1; ++i )
 		{
 			const double a{ abs_val( get_real( m_matrix[ i ][ i ] ) ) },
 				b{ abs_val( get_real( m_matrix[ i + 1 ][ i + 1 ] ) ) },
 				c{ abs_val( m_matrix[ i + 1 ][ i ] ) };
 
-			if( c <= DEFLATION_ACC * ( a + b ) )
+			if( c <= acc * ( a + b ) )
 				m_matrix[ i + 1 ][ i ] = T{};
 		}
 
 		// Rayleigh shifting
 		// =================
-		T mu{ m_matrix[ max_steps ][ max_steps ] };
+		T mu{ m_matrix[ block_end ][ block_end ] };
+		const auto shift_begin{ shift };
 
-		for( size_t i{ 0 }; i < m_rows; ++i )
+		for( auto i{ shift_begin }; i <= block_end; ++i )
 			m_matrix[ i ][ i ] -= mu;
 
 		// QR Hessenberg reduction
 		// =======================
 		if( QHQ_2x2_with_shifts( shift, shift ) )
 		{
-			for( size_t i{ shift }; i < max_steps - 1; ++i )
+			for( auto i{ shift }; i < block_end - 1; ++i )
 				QHQ_2x2_with_shifts( i + 1, i );
 		}
 		else
@@ -692,10 +694,13 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 		// Rayleigh shifting back
 		// ======================
-		for( size_t i{ 0 }; i < m_rows; ++i )
+		for( auto i{ shift_begin }; i <= block_end; ++i )
 			m_matrix[ i ][ i ] += mu;
 
-		if( shift == max_steps )
+		while( block_end > shift && abs_val( m_matrix[ block_end ][ block_end - 1 ] ) <= acc )
+			--block_end;
+
+		if( shift >= block_end )
 			break;
 	}
 

@@ -9,7 +9,7 @@ constexpr double eps_float{ 1e-4 };
 constexpr double eps_double{ 1e-10 };
 
 using test_types = ::testing::Types< float, double, complex< float >, complex< double > >;
-
+using test_complex_types = ::testing::Types< complex< float >, complex< double > >;
 
 template< typename T >
 class non_singular_linear_equation : public ::testing::Test
@@ -119,9 +119,10 @@ protected:
 	vector< DT > b, x, r;
 	vector< complex< double > > l;
 
-	RT eps{ 0.1 };
 	double low_val{ 0.01 }, high_val{ 100.0 };
 
+	// gets desire accuracy
+	RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.00001; }
 	// matrix size
 	virtual size_t get_mx_size() { return 8; }
 	// matrix creation
@@ -134,7 +135,6 @@ protected:
 		{
 			low_val = 0.001;
 			high_val = 1000.0;
-			eps = 0.0001;
 		}
 
 		// tested matrix
@@ -152,11 +152,9 @@ protected:
 };
 
 template< typename T >
-class symmetric_eigenvalue_problem : public eigenvalues_test< T >
+class hermitian_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
-	// matrix size
-	virtual size_t get_mx_size() override { return 8; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -168,7 +166,7 @@ protected:
 
 			for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
 			{
-				auto val{ static_cast< T >( generate_random< T >( low_val, high_val ) ) };
+				auto val{ generate_random< T >( low_val, high_val ) };
 				A.set_element( val, row, col );
 				A.set_element( conjugate( val ), col, row );
 				A_.set_element( static_cast< complex< double > >( val ), row, col );
@@ -178,18 +176,14 @@ protected:
 	}
 };
 
+TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 
-//using test_types2 = ::testing::Types< float, double, complex< float >, complex< double > >;
-using test_types2 = ::testing::Types< float, double, complex< float >, complex< double > >;
-
-TYPED_TEST_SUITE( symmetric_eigenvalue_problem, test_types2 );
-
-TYPED_TEST( symmetric_eigenvalue_problem, QR_algorithm_Rayleigh )
+TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Rayleigh )
 {
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, numeric_limits< double >::min() ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
 
 	// verification each computed eigen value 
 	// if "l" is an eigen value then matrix (A - Il) is singular
@@ -202,6 +196,47 @@ TYPED_TEST( symmetric_eigenvalue_problem, QR_algorithm_Rayleigh )
 
 		auto A_Il{ A_ - Il };
 
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, eps ), std::runtime_error );
+		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
+	}
+}
+
+template< typename T >
+class complex_eigenvalue_problem : public eigenvalues_test< T >
+{
+	// matrix creation
+	virtual void create_matrix() override
+	{
+		for( size_t row{ 0 }; row < get_mx_size(); ++row )
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
+			{
+				auto val{ generate_random< T >( low_val, high_val ) };
+				A.set_element( val, row, col );
+				A_.set_element( static_cast< complex< double > >( val ), row, col );
+			}
+
+	}
+};
+
+TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
+
+TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Rayleigh )
+{
+	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
+	EXPECT_NO_THROW( A.QHQ_decomposition() );
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
+
+	// verification each computed eigen value 
+	// if "l" is an eigen value then matrix (A - Il) is singular
+	// so LU_decomposition should throw runtime error "obtained singular matrix"
+	// =========================================================================
+	for( size_t i{ 0 }; i < get_mx_size(); ++i )
+	{
+		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+			Il.set_element( l[ i ], rc, rc );
+
+		auto A_Il{ A_ - Il };
+
+		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
 	}
 }
