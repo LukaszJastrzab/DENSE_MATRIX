@@ -132,7 +132,7 @@ private:
 	/// method dumps eigen values during QR algorithm
 	void QR_get_eigenvalues( std::vector< std::complex< double > >& l );
 	/// 
-	bool QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift );
+	bool QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift, size_t block_end );
 
 	/// test methods
 	template< typename U >
@@ -575,7 +575,7 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > 
 }
 
 template< typename T >
-bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift )
+bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift, size_t block_end )
 {
 	const auto row_nshift{ row_shift + 1 };
 	const auto col_nshift{ col_shift + 1 };
@@ -610,12 +610,12 @@ bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift 
 
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
-	std::vector< T > vTA( m_cols, T{} );
+	std::vector< T > vTA( block_end + 1, T{} );
 
-	for( size_t c{ col_nshift }; c < m_cols; ++c )
+	for( size_t c{ col_nshift }; c <= block_end; ++c )
 		vTA[ c ] = vT[ 0 ] * m_matrix[ row_shift ][ c ] + vT[ 1 ] * m_matrix[ row_nshift ][ c ];
 
-	for( size_t c{ col_nshift }; c < m_cols; ++c )
+	for( size_t c{ col_nshift }; c <= block_end; ++c )
 	{
 		m_matrix[ row_shift ][ c ] -= beta * v[ 0 ] * vTA[ c ];
 		m_matrix[ row_nshift ][ c ] -= beta * v[ 1 ] * vTA[ c ];
@@ -623,12 +623,13 @@ bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift 
 
 	// A <- A' - beta * ( A' v ) vT
 	// ============================
-	std::vector< T > Av( m_rows, T{} );
+	const auto max_rows{ block_end + 1 };
+	std::vector< T > Av( max_rows, T{} );
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + 2, m_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + 2, max_rows ); ++r )
 		Av[ r ] = m_matrix[ r ][ row_shift ] * v[ 0 ] + m_matrix[ r ][ row_nshift ] * v[ 1 ];
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + 2, m_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + 2, max_rows ); ++r )
 	{
 		m_matrix[ r ][ row_shift ] -= beta * Av[ r ] * vT[ 0 ];
 		m_matrix[ r ][ row_nshift ] -= beta * Av[ r ] * vT[ 1 ];
@@ -684,10 +685,10 @@ void dense_matrix< T >::compute_eigenvalues_QR_with_RShift( std::vector< std::co
 
 		// QR Hessenberg reduction
 		// =======================
-		if( QHQ_2x2_with_shifts( shift, shift ) )
+		if( QHQ_2x2_with_shifts( shift, shift, block_end ) )
 		{
 			for( auto i{ shift }; i < block_end - 1; ++i )
-				QHQ_2x2_with_shifts( i + 1, i );
+				QHQ_2x2_with_shifts( i + 1, i, block_end );
 		}
 		else
 			++shift;
