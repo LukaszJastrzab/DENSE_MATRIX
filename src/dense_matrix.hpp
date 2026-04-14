@@ -132,7 +132,7 @@ private:
 	/// method dumps eigen values during QR algorithm
 	void QR_get_eigenvalues( std::vector< std::complex< double > >& l );
 	/// 
-	bool QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift, size_t block_end );
+	bool QHQ_NxN_with_shifts( size_t row_shift, size_t col_shift, size_t block_end, size_t block_size );
 
 	/// test methods
 	template< typename U >
@@ -575,32 +575,46 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > 
 }
 
 template< typename T >
-bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift, size_t block_end )
+bool dense_matrix< T >::QHQ_NxN_with_shifts( size_t row_shift, size_t col_shift, size_t block_end, size_t block_size )
 {
 	const auto row_nshift{ row_shift + 1 };
 	const auto col_nshift{ col_shift + 1 };
 
-	// QR Hessenberg reduction
-	// =======================
-	auto v0 = m_matrix[ row_shift ][ col_shift ];
-	auto v1 = m_matrix[ row_nshift ][ col_shift ];
+	std::vector< T > v( block_size );
+	for( size_t i{ 0 }; i < block_size; ++i )
+		v[ i ] = m_matrix[ row_shift + i ][ col_shift ];
 
-	if( v1 == T{} )
+	T sum{};
+	for( size_t i{ 0 }; i < block_size; ++i )
+		sum += v[ i ];
+
+	if( abs_val( sum ) <= std::numeric_limits< double >::epsilon() )
 		return false;
 
-	double abs_v0 = abs_val( v0 );
-	double abs_v1 = abs_val( v1 );
-	double col_norm{ std::sqrt( abs_v0 * abs_v0 + abs_v1 * abs_v1 ) };
+	double col_norm{ 0.0 };
+	std::vector< double > abs_v( block_size );
+	for( size_t i{ 0 }; i < block_size; ++i )
+	{	
+		double vabs{ abs_val( v[ i ] ) };
+		abs_v[ i ] = vabs;
+		col_norm += ( vabs * vabs );
+	}
+	col_norm = std::sqrt( col_norm );
 
-	T sign = ( abs_v0 != 0.0 ? -v0 / T{ static_cast< RT >( abs_v0 ) } : T{ -1 } );
+	T sign = ( abs_v[ 0 ] != 0.0 ? -v[ 0 ] / T{ static_cast< RT >( abs_v[ 0 ] ) } : T{ -1 } );
 	T sign_norm = sign * T{ static_cast< RT >( col_norm ) };
 
-	const T v[ 2 ]{ v0 - sign_norm, v1 };
-	const T vT[ 2 ]{ conjugate( v[ 0 ] ), conjugate( v[ 1 ] ) };
+	v[ 0 ] -= sign_norm;
 
-	T vTv{ v[ 0 ] * vT[ 0 ] + v[ 1 ] * vT[ 1 ] };
+	std::vector< T > vT( block_size );
+	for( size_t i{ 0 }; i < block_size; ++i )
+		vT[ i ] = conjugate( v[ i ] );
 
-	if( abs_val( vTv ) < 1e-16 )
+	T vTv{};
+	for( size_t i{ 0 }; i < block_size; ++i )
+		vTv += v[ i ] * vT[ i ];
+
+	if( abs_val( vTv ) < std::numeric_limits< double >::epsilon() )
 		return false;
 
 	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
@@ -626,10 +640,10 @@ bool dense_matrix< T >::QHQ_2x2_with_shifts( size_t row_shift, size_t col_shift,
 	const auto max_rows{ block_end + 1 };
 	std::vector< T > Av( max_rows, T{} );
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + 2, max_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
 		Av[ r ] = m_matrix[ r ][ row_shift ] * v[ 0 ] + m_matrix[ r ][ row_nshift ] * v[ 1 ];
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + 2, max_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
 	{
 		m_matrix[ r ][ row_shift ] -= beta * Av[ r ] * vT[ 0 ];
 		m_matrix[ r ][ row_nshift ] -= beta * Av[ r ] * vT[ 1 ];
@@ -685,10 +699,10 @@ void dense_matrix< T >::compute_eigenvalues_QR_with_RShift( std::vector< std::co
 
 		// QR Hessenberg reduction
 		// =======================
-		if( QHQ_2x2_with_shifts( shift, shift, block_end ) )
+		if( QHQ_NxN_with_shifts( shift, shift, block_end, 2 ) )
 		{
 			for( auto i{ shift }; i < block_end - 1; ++i )
-				QHQ_2x2_with_shifts( i + 1, i, block_end );
+				QHQ_NxN_with_shifts( i + 1, i, block_end, 2 );
 		}
 		else
 			++shift;
