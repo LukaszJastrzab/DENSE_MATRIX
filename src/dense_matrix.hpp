@@ -620,20 +620,20 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( size_t row_shift, size_t col_shift,
 	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
 
 	m_matrix[ row_shift ][ col_shift ] = sign_norm;
-	m_matrix[ row_nshift ][ col_shift ] = T{};
+	for ( size_t i{ 1 }; i < block_size; ++i )
+		m_matrix[ i + row_shift ][ col_shift ] = T{};
 
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
 	std::vector< T > vTA( block_end + 1, T{} );
 
 	for( size_t c{ col_nshift }; c <= block_end; ++c )
-		vTA[ c ] = vT[ 0 ] * m_matrix[ row_shift ][ c ] + vT[ 1 ] * m_matrix[ row_nshift ][ c ];
+		for ( size_t i{ 0 }; i < block_size; ++i )
+			vTA[ c ] += vT[ i ] * m_matrix[ i + row_shift ][ c ];
 
 	for( size_t c{ col_nshift }; c <= block_end; ++c )
-	{
-		m_matrix[ row_shift ][ c ] -= beta * v[ 0 ] * vTA[ c ];
-		m_matrix[ row_nshift ][ c ] -= beta * v[ 1 ] * vTA[ c ];
-	}
+		for( size_t i{ 0 }; i < block_size; ++i)
+			m_matrix[ i + row_shift ][ c ] -= beta * v[ i ] * vTA[ c ];
 
 	// A <- A' - beta * ( A' v ) vT
 	// ============================
@@ -641,13 +641,12 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( size_t row_shift, size_t col_shift,
 	std::vector< T > Av( max_rows, T{} );
 
 	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
-		Av[ r ] = m_matrix[ r ][ row_shift ] * v[ 0 ] + m_matrix[ r ][ row_nshift ] * v[ 1 ];
+		for( size_t i{ 0 }; i < block_size; ++i )
+			Av[ r ] += m_matrix[ r ][ i + row_shift ] * v[ i ];
 
 	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
-	{
-		m_matrix[ r ][ row_shift ] -= beta * Av[ r ] * vT[ 0 ];
-		m_matrix[ r ][ row_nshift ] -= beta * Av[ r ] * vT[ 1 ];
-	}
+		for( size_t i{ 0 }; i < block_size; ++i )
+			m_matrix[ r ][ i + row_shift ] -= beta * Av[ r ] * vT[ i ];
 
 	return true;
 }
