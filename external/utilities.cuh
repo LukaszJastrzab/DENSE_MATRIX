@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stdexcept>
+#include <string>
 #include <type_traits>
 #include <complex>
 
@@ -7,6 +9,13 @@
 #include <thrust/complex.h>
 #include <cublas_v2.h>
 #endif
+
+class singularity_error : public std::runtime_error
+{
+public:
+    explicit singularity_error( const std::string& msg )
+        : std::runtime_error( msg ) {}
+};
 
 #ifdef __CUDACC__
 __host__ __device__ __forceinline__
@@ -135,6 +144,15 @@ std::complex< T > conjugate( const std::complex< T >& x )
 
 
 #ifdef __CUDACC__
+
+template< typename T >
+struct is_complex< thrust::complex< T > > : std::true_type {};
+
+template< typename T >
+inline T get_real( const thrust::complex< T >& x )
+{
+    return x.real();
+}
 
 template< typename T >
 struct real_type< thrust::complex< T > >

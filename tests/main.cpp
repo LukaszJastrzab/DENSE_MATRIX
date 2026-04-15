@@ -183,7 +183,7 @@ TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Rayleigh )
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, QR_TYPE::RAYLEIGH_SHIFT ) );
 
 	// verification each computed eigen value 
 	// if "l" is an eigen value then matrix (A - Il) is singular
@@ -196,7 +196,7 @@ TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Rayleigh )
 
 		auto A_Il{ A_ - Il };
 
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
+		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
 	}
 }
 
@@ -224,7 +224,7 @@ TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Rayleigh )
 	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
 	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, QR_TYPE::RAYLEIGH_SHIFT ) );
 
 	// verification each computed eigen value 
 	// if "l" is an eigen value then matrix (A - Il) is singular
@@ -237,6 +237,6 @@ TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Rayleigh )
 
 		auto A_Il{ A_ - Il };
 
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
+		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
 	}
 }
