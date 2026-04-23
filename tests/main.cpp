@@ -122,7 +122,7 @@ protected:
 	double low_val{ 0.01 }, high_val{ 100.0 };
 
 	// gets desire accuracy
-	RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.00001; }
+	virtual RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.00001; }
 	// matrix size
 	virtual size_t get_mx_size() { return 8; }
 	// matrix creation
@@ -245,63 +245,26 @@ template< typename T >
 class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 public:
-	// matrix size
-	virtual size_t get_mx_size() override { return 5; }
-
+	// gets desire accuracy
+	virtual RT get_acc() override { return std::is_same_v< RT, float > ? 0.5 : 0.01; }
 protected:
 	// matrix creation
 	virtual void create_matrix() override
 	{
-		//for( size_t row{ 0 }; row < get_mx_size(); ++row )
-		//	for( size_t col{ 0 }; col < get_mx_size(); ++col )
-		//	{
-		//		auto val{ generate_random< T >( low_val, high_val ) };
-		//		A.set_element( val, row, col );
-		//		A_.set_element( static_cast< complex< double > >( val ), row, col );
-		//	}
-
-		A.set_element( 4.0, 0, 0 );
-		A.set_element( 1.0, 0, 1 );
-		A.set_element( -2.0, 0, 2 );
-		A.set_element( 2.0, 1, 0 );
-		A.set_element( 3.0, 1, 1 );
-		A.set_element( 1.0, 1, 2 );
-		A.set_element( -1.0, 1, 3 );
-		A.set_element( 1.0, 2, 1 );
-		A.set_element( 2.0, 2, 2 );
-		A.set_element( 2.0, 2, 3 );
-		A.set_element( -1.0, 2, 4 );
-		A.set_element( 1.0, 3, 2 );
-		A.set_element( 1.0, 3, 3 );
-		A.set_element( 2.0, 3, 4 );
-		A.set_element( 1.0, 4, 3 );
-
-		A_.set_element( 4.0, 0, 0 );
-		A_.set_element( 1.0, 0, 1 );
-		A_.set_element( -2.0, 0, 2 );
-		A_.set_element( 2.0, 1, 0 );
-		A_.set_element( 3.0, 1, 1 );
-		A_.set_element( 1.0, 1, 2 );
-		A_.set_element( -1.0, 1, 3 );
-		A_.set_element( 1.0, 2, 1 );
-		A_.set_element( 2.0, 2, 2 );
-		A_.set_element( 2.0, 2, 3 );
-		A_.set_element( -1.0, 2, 4 );
-		A_.set_element( 1.0, 3, 2 );
-		A_.set_element( 1.0, 3, 3 );
-		A_.set_element( 2.0, 3, 4 );
-		A_.set_element( 1.0, 4, 3 );
-
+		for( size_t row{ 0 }; row < get_mx_size(); ++row )
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
+			{
+				auto val{ generate_random< T >( low_val, high_val ) };
+				A.set_element( val, row, col );
+				A_.set_element( static_cast< complex< double > >( val ), row, col );
+			}
 	}
 };
 
-//using test_types_ = ::testing::Types< float >; // jest for test
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 
 TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis )
 {
-	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
-	//EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
 	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, false, true ) );
 

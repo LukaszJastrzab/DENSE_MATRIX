@@ -680,10 +680,10 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 {
 	if( m_rows != m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_rows != m_cols" );
-	//if( m_dynamic_state == DYNAMIC_STATE::INIT )
-	//	QHQ_decomposition();
-	//if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
-	//	throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
+	if( m_dynamic_state == DYNAMIC_STATE::INIT )
+		QHQ_decomposition();
+	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
+		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
 
 	const auto block_size = Francis ? 3 : 2;
 	const size_t max_steps = static_cast< int >( m_rows ) - 1;
@@ -694,6 +694,13 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 	// ===================================================
 	for( size_t i{ 0 }; i < max_steps - 1; ++i )
 		m_matrix[ i + 2 ][ i ] = T{};
+
+	// vanish elements yet under lower diag of Hessenberg form
+	// in case of double shift usage
+	// =======================================================
+	if ( Francis )
+		for( size_t i{ 0 }; i < max_steps - 2; ++i )
+			m_matrix[ i + 3 ][ i ] = T{};
 
 	size_t shift{ 0 };
 	size_t block_end{ max_steps };
