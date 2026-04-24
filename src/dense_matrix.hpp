@@ -137,6 +137,11 @@ private:
 	/// method returns Francis step column
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
 
+	void QR_get_complex_eigenvalue( const size_t shift, std::vector< std::complex< double > >&l );
+
+	void modify_QR_block( const std::vector< T > diag1, const std::vector< T > diag2, const double acc, std::vector< std::complex< double > >&l, size_t & block_beg, size_t & block_end );
+
+
 	/// test methods
 	template< typename U >
 	friend std::vector< dense_matrix< U > > get_factors( const dense_matrix< U >& A );
@@ -550,6 +555,72 @@ void dense_matrix< T >::QHQ_decomposition()
 	m_dynamic_state = DYNAMIC_STATE::QHQ_DECOMPOSED;
 }
 
+
+template< typename T >
+void dense_matrix< T >::QR_get_complex_eigenvalue( const size_t shift, std::vector< std::complex< double > >& l )
+{
+	std::complex< double > a{ m_matrix[ shift ][ shift ] }, b{ m_matrix[ shift ][ shift + 1 ] },
+		c{ m_matrix[ shift + 1 ][ shift ] }, d{ m_matrix[ shift + 1 ][ shift + 1 ] };
+
+	std::complex< double > tr{ a + d };
+	std::complex< double > det{ a * d - b * c };
+	std::complex< double > disc{ std::sqrt( tr * tr - std::complex< double >( 4.0 ) * det ) };
+
+	l[ shift ] = ( tr + disc ) / std::complex< double >( 2.0 );
+	l[ shift + 1 ] = ( tr - disc ) / std::complex< double >( 2.0 );
+}
+
+
+template< typename T >
+void dense_matrix< T >::modify_QR_block( const std::vector< T > diag1, const std::vector< T > diag2, const double acc, std::vector< std::complex< double > >& l, size_t& block_beg, size_t& block_end )
+{
+	while( block_beg < block_end )
+	{
+		const auto abs2{ abs_val( diag2[ block_beg ] ) };
+
+		if( abs_val( diag1[ block_beg ] ) > abs2 )
+		{
+			if( abs2 <= acc )
+				++block_beg;
+			else
+				break;
+		}
+		else
+		{
+			std::complex< double > l1{ l[ block_beg ] }, l2{ l[ block_beg + 1 ] };
+			QR_get_complex_eigenvalue( block_beg, l );
+
+			if( abs_val( l[ block_beg ] - l1 ) <= acc && abs_val( l[ block_beg + 1 ] - l2 ) <= acc )
+				++block_beg;
+			else
+				break;
+		}
+	}
+	while( block_beg < block_end )
+	{
+		const auto abs2{ abs_val( diag2[ block_end - 1 ] ) };
+
+		if( abs_val( diag1[ block_end - 1 ] ) > abs2 )
+		{
+			if( abs2 <= acc )
+				--block_end;
+			else
+				break;
+		}
+		else
+		{
+			std::complex< double > l1{ l[ block_end - 1 ] }, l2{ l[ block_end ] };
+			QR_get_complex_eigenvalue( block_end - 1, l );
+
+			if( abs_val( l[ block_end - 1 ] - l1 ) <= acc && abs_val( l[ block_end ] - l2 ) <= acc )
+				--block_end;
+			else
+				break;
+		}
+	}
+}
+
+
 template< typename T >
 void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > >& l )
 {
@@ -559,15 +630,16 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > 
 		{
 			// blok 2x2
 			// ========
-			std::complex< double > a{ m_matrix[ i ][ i ] }, b{ m_matrix[ i ][ i + 1 ] },
-				c{ m_matrix[ i + 1 ][ i ] }, d{ m_matrix[ i + 1 ][ i + 1 ] };
+			QR_get_complex_eigenvalue( i, l );
+			//std::complex< double > a{ m_matrix[ i ][ i ] }, b{ m_matrix[ i ][ i + 1 ] },
+			//	c{ m_matrix[ i + 1 ][ i ] }, d{ m_matrix[ i + 1 ][ i + 1 ] };
 
-			std::complex< double > tr{ a + d };
-			std::complex< double > det{ a * d - b * c };
-			std::complex< double > disc{ std::sqrt( tr * tr - std::complex< double >( 4.0 ) * det ) };
+			//std::complex< double > tr{ a + d };
+			//std::complex< double > det{ a * d - b * c };
+			//std::complex< double > disc{ std::sqrt( tr * tr - std::complex< double >( 4.0 ) * det ) };
 
-			l[ i ] = ( tr + disc ) / std::complex< double >( 2.0 );
-			l[ i + 1 ] = ( tr - disc ) / std::complex< double >( 2.0 );
+			//l[ i ] = ( tr + disc ) / std::complex< double >( 2.0 );
+			//l[ i + 1 ] = ( tr - disc ) / std::complex< double >( 2.0 );
 
 			i += 2;
 		}
@@ -667,8 +739,11 @@ std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const siz
 		d{ m_matrix[ block_end ][ block_end ] };
 	const T tr{ a + d }, det{ a * d - b * c };
 	const T a11{ m_matrix[ shift ][ shift ] }, a12{ m_matrix[ shift ][ shift + 1 ] },
-		a21{ m_matrix[ shift + 1 ][ shift ] }, a22{ m_matrix[ shift + 1 ][ shift + 1 ] },
-		a32{ m_matrix[ shift + 2 ][ shift + 1 ] };
+		a21{ m_matrix[ shift + 1 ][ shift ] }, a22{ m_matrix[ shift + 1 ][ shift + 1 ] };
+	T a32{};
+
+	if ( shift < m_rows - 2 )
+		a32 = m_matrix[ shift + 2 ][ shift + 1 ];
 
 	std::vector< T > v{ a11 * a11 + a21 * a12 - tr * a11 + det,
 		                a11 * a21 + a21 * a22 - tr * a21,
@@ -691,9 +766,11 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 	const size_t max_steps = static_cast< int >( m_rows ) - 1;
 
 	l.resize( m_rows, std::complex< double >{} );
-	QR_get_eigenvalues( l );
 
-	std::vector< std::complex< double > > l_new( m_rows, std::complex< double >{} );
+	std::vector< T > sub_diag_1( max_steps );
+	std::vector< T > sub_diag_2( max_steps );
+	for( size_t i{ 0 }; i < max_steps; ++i )
+		sub_diag_1[ i ] = m_matrix[ i + 1 ][ i ];
 
 	// vanish elements under lower diag of Hessenberg form
 	// ===================================================
@@ -732,18 +809,20 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 		for( auto i{ block_beg }; i <= block_end; ++i )
 			m_matrix[ i ][ i ] += mu;
 
-		QR_get_eigenvalues( l_new );
+		// new cond
+		for( size_t i{ 0 }; i < max_steps; ++i )
+			sub_diag_2[ i ] = m_matrix[ i + 1 ][ i ];
 
-		while( abs_val( l_new[ block_beg ] - l[ block_beg ] ) <= acc && block_beg < block_end )
-			++block_beg;
-		while( abs_val( l_new[ block_end ] - l[ block_end ] ) <= acc && block_beg < block_end )
-			--block_end;
+		modify_QR_block( sub_diag_1, sub_diag_2, acc, l, block_beg, block_end );
 
-		std::swap( l, l_new );
+		std::swap( sub_diag_1, sub_diag_2 );
+		// new cond
 
 		if( block_beg >= block_end )
 			break;
 	}
+
+	QR_get_eigenvalues( l );
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
 }
