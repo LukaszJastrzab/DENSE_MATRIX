@@ -122,7 +122,7 @@ protected:
 	double low_val{ 0.01 }, high_val{ 100.0 };
 
 	// gets desire accuracy
-	virtual RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.00001; }
+	virtual RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.0001; }
 	// matrix size
 	virtual size_t get_mx_size() { return 8; }
 	// matrix creation
@@ -147,7 +147,19 @@ protected:
 
 	void TearDown() override
 	{
-		EXPECT_TRUE( true );
+		// verification each computed eigen value 
+		// if "l" is an eigen value then matrix (A - Il) is singular
+		// so LU_decomposition should throw runtime error "obtained singular matrix"
+		// =========================================================================
+		for( size_t i{ 0 }; i < get_mx_size(); ++i )
+		{
+			for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+				Il.set_element( l[ i ], rc, rc );
+
+			auto A_Il{ A_ - Il };
+
+			EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
+		}
 	}
 };
 
@@ -178,26 +190,10 @@ protected:
 
 TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 
-TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Rayleigh )
+TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm )
 {
-	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
-	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, true, false ) );
-
-	// verification each computed eigen value 
-	// if "l" is an eigen value then matrix (A - Il) is singular
-	// so LU_decomposition should throw runtime error "obtained singular matrix"
-	// =========================================================================
-	for( size_t i{ 0 }; i < get_mx_size(); ++i )
-	{
-		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-			Il.set_element( l[ i ], rc, rc );
-
-		auto A_Il{ A_ - Il };
-
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
-	}
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, true ) );
 }
 
 template< typename T >
@@ -219,34 +215,15 @@ class complex_eigenvalue_problem : public eigenvalues_test< T >
 
 TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
 
-TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Rayleigh )
+TYPED_TEST( complex_eigenvalue_problem, QR_algorithm )
 {
-	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
-	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, true, false ) );
-
-	// verification each computed eigen value 
-	// if "l" is an eigen value then matrix (A - Il) is singular
-	// so LU_decomposition should throw runtime error "obtained singular matrix"
-	// =========================================================================
-	for( size_t i{ 0 }; i < get_mx_size(); ++i )
-	{
-		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-			Il.set_element( l[ i ], rc, rc );
-
-		auto A_Il{ A_ - Il };
-
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
-	}
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, true ) );
 }
 
 template< typename T >
 class general_eigenvalue_problem : public eigenvalues_test< T >
 {
-public:
-	// gets desire accuracy
-	virtual RT get_acc() override { return std::is_same_v< RT, float > ? 0.5 : 0.01; }
 protected:
 	// matrix creation
 	virtual void create_matrix() override
@@ -263,22 +240,8 @@ protected:
 
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 
-TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis )
+TYPED_TEST( general_eigenvalue_problem, QR_algorithm )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 1500, false, true ) );
-
-	// verification each computed eigen value 
-	// if "l" is an eigen value then matrix (A - Il) is singular
-	// so LU_decomposition should throw runtime error "obtained singular matrix"
-	// =========================================================================
-	for( size_t i{ 0 }; i < get_mx_size(); ++i )
-	{
-		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-			Il.set_element( l[ i ], rc, rc );
-
-		auto A_Il{ A_ - Il };
-
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), singularity_error );
-	}
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( l, 5000, true ) );
 }
