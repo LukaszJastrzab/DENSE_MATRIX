@@ -136,11 +136,8 @@ private:
 	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, std::vector< T > v = {} );
 	/// method returns Francis step column
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
-
+	/// 
 	void QR_get_complex_eigenvalue( const size_t shift, std::vector< std::complex< double > >&l );
-
-	void modify_QR_block( const std::vector< T > diag1, const std::vector< T > diag2, const double acc, std::vector< std::complex< double > >&l, size_t & block_beg, size_t & block_end );
-
 
 	/// test methods
 	template< typename U >
@@ -572,75 +569,13 @@ void dense_matrix< T >::QR_get_complex_eigenvalue( const size_t shift, std::vect
 
 
 template< typename T >
-void dense_matrix< T >::modify_QR_block( const std::vector< T > diag1, const std::vector< T > diag2, const double acc, std::vector< std::complex< double > >& l, size_t& block_beg, size_t& block_end )
-{
-	while( block_beg < block_end )
-	{
-		const auto abs2{ abs_val( diag2[ block_beg ] ) };
-
-		if( abs_val( diag1[ block_beg ] ) > abs2 )
-		{
-			if( abs2 <= acc )
-				++block_beg;
-			else
-				break;
-		}
-		else
-		{
-			std::complex< double > l1{ l[ block_beg ] }, l2{ l[ block_beg + 1 ] };
-			QR_get_complex_eigenvalue( block_beg, l );
-
-			if( abs_val( l[ block_beg ] - l1 ) <= acc && abs_val( l[ block_beg + 1 ] - l2 ) <= acc )
-				++block_beg;
-			else
-				break;
-		}
-	}
-	while( block_beg < block_end )
-	{
-		const auto abs2{ abs_val( diag2[ block_end - 1 ] ) };
-
-		if( abs_val( diag1[ block_end - 1 ] ) > abs2 )
-		{
-			if( abs2 <= acc )
-				--block_end;
-			else
-				break;
-		}
-		else
-		{
-			std::complex< double > l1{ l[ block_end - 1 ] }, l2{ l[ block_end ] };
-			QR_get_complex_eigenvalue( block_end - 1, l );
-
-			if( abs_val( l[ block_end - 1 ] - l1 ) <= acc && abs_val( l[ block_end ] - l2 ) <= acc )
-				--block_end;
-			else
-				break;
-		}
-	}
-}
-
-
-template< typename T >
 void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > >& l )
 {
 	for( size_t i{ 0 }; i < m_cols; )
 	{
 		if( i < m_cols - 1 && abs_val( m_matrix[ i + 1 ][ i ] ) > DEFLATION_ACC )
 		{
-			// blok 2x2
-			// ========
 			QR_get_complex_eigenvalue( i, l );
-			//std::complex< double > a{ m_matrix[ i ][ i ] }, b{ m_matrix[ i ][ i + 1 ] },
-			//	c{ m_matrix[ i + 1 ][ i ] }, d{ m_matrix[ i + 1 ][ i + 1 ] };
-
-			//std::complex< double > tr{ a + d };
-			//std::complex< double > det{ a * d - b * c };
-			//std::complex< double > disc{ std::sqrt( tr * tr - std::complex< double >( 4.0 ) * det ) };
-
-			//l[ i ] = ( tr + disc ) / std::complex< double >( 2.0 );
-			//l[ i + 1 ] = ( tr - disc ) / std::complex< double >( 2.0 );
-
 			i += 2;
 		}
 		else
@@ -689,12 +624,7 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 	T vTv{};
 	for( size_t i{ 0 }; i < block_size; ++i )
 		vTv += v[ i ] * vT[ i ];
-
-	if( abs_val( vTv ) < std::numeric_limits< double >::epsilon() )
-		return false;
-
-	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
-
+	
 	if( !use_spec_v )
 	{
 		m_matrix[ row_shift ][ col_shift ] = sign_norm;
@@ -702,28 +632,32 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 			m_matrix[ i ][ col_shift ] = T{};
 	}
 
+	if( abs_val( vTv ) < std::numeric_limits< RT >::epsilon() )
+		return false;
+
+	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
+
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
-	std::vector< T > vTA( block_end + 1, T{} );
+	std::vector< T > vTA( block_end, T{} );
 
-	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c <= block_end; ++c )
+	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < block_end; ++c )
 		for ( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i )
 			vTA[ c ] += vT[ i - row_shift ] * m_matrix[ i ][ c ];
 
-	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c <= block_end; ++c )
+	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < block_end; ++c )
 		for( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i)
 			m_matrix[ i ][ c ] -= beta * v[ i - row_shift ] * vTA[ c ];
 
 	// A <- A' - beta * ( A' v ) vT
 	// ============================
-	const auto max_rows{ block_end + 1 };
-	std::vector< T > Av( max_rows, T{} );
+	std::vector< T > Av( block_end, T{} );
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, block_end ); ++r )
 		for( size_t i{ row_shift }; i < min( m_cols, row_shift + block_size ); ++i )
 			Av[ r ] += m_matrix[ r ][ i ] * v[ i - row_shift ];
 
-	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, max_rows ); ++r )
+	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, block_end ); ++r )
 		for( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i )
 			m_matrix[ r ][ i ] -= beta * Av[ r ] * vT[ i - row_shift ];
 
@@ -762,64 +696,72 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
 
+	using ull_pair = std::pair< size_t, size_t >;
+	std::map< size_t, ull_pair > blocks;
+
 	const auto block_size = Francis ? 3 : 2;
-	const size_t max_steps = static_cast< int >( m_rows ) - 1;
-
 	l.resize( m_rows, std::complex< double >{} );
-
-	std::vector< T > sub_diag_1( max_steps );
-	std::vector< T > sub_diag_2( max_steps );
-	for( size_t i{ 0 }; i < max_steps; ++i )
-		sub_diag_1[ i ] = m_matrix[ i + 1 ][ i ];
 
 	// vanish elements under lower diag of Hessenberg form
 	// ===================================================
-	for( size_t i{ 0 }; i < max_steps - 1; ++i )
+	for( size_t i{ 0 }; i < m_rows - 2; ++i )
 		m_matrix[ i + 2 ][ i ] = T{};
 
 	// vanish elements yet under lower diag of Hessenberg form
 	// in case of double shift usage
 	// =======================================================
 	if ( Francis )
-		for( size_t i{ 0 }; i < max_steps - 2; ++i )
+		for( size_t i{ 0 }; i < m_rows - 3; ++i )
 			m_matrix[ i + 3 ][ i ] = T{};
 
-	size_t block_beg{ 0 };
-	size_t block_end{ max_steps };
+	size_t block_idx{ 0 };
+	blocks[ block_idx++ ] = ull_pair( 0, m_rows );
 
 	for( size_t iter{ 0 }; iter < max_it; ++iter )
 	{
-		// Rayleigh shifting
-		// =================
-		T mu{ m_matrix[ block_end ][ block_end ] };
-		for( auto i{ block_beg }; i <= block_end; ++i )
-			m_matrix[ i ][ i ] -= mu;
-
-		// QR Hessenberg reduction
-		// =======================
-		if( QHQ_NxN_with_shifts( block_beg, block_beg, block_end, block_size,
-			Francis ? get_Francis_v( block_beg, block_end ) : std::vector< T >() ) )
+		// deflection
+		// ==========
+		for( auto& [ id, block ] : blocks )
 		{
-			for( auto i{ block_beg }; i < block_end - 1; ++i )
-				QHQ_NxN_with_shifts( i + 1, i, block_end, block_size );
+			for( auto i{ block.first }; i < block.second - 1; ++i )
+			{
+				auto ii{ i + 1 };
+				const double a{ abs_val( get_real( m_matrix[ i ][ i ] ) ) },
+					b{ abs_val( get_real( m_matrix[ ii ][ ii ] ) ) },
+					c{ abs_val( m_matrix[ ii ][ i ] ) };
+
+				if( c <= acc * ( a + b ) )
+				{
+					m_matrix[ ii ][ i ] = T{};
+					blocks[ block_idx++ ] = ull_pair( ii, block.second );
+					block.second = ii;
+					break;
+				}
+			}
 		}
 
-		// Rayleigh shifting back
-		// ======================
-		for( auto i{ block_beg }; i <= block_end; ++i )
-			m_matrix[ i ][ i ] += mu;
+		for( const auto& [ id, block ] : blocks )
+		{
+			// Rayleigh shifting
+			// =================
+			T mu{ m_matrix[ block.second - 1 ][ block.second - 1 ] };
+			for( auto i{ block.first }; i < block.second; ++i )
+				m_matrix[ i ][ i ] -= mu;
 
-		// new cond
-		for( size_t i{ 0 }; i < max_steps; ++i )
-			sub_diag_2[ i ] = m_matrix[ i + 1 ][ i ];
+			// QR Hessenberg reduction
+			// =======================
+			if( QHQ_NxN_with_shifts( block.first, block.first, block.second, block_size,
+				Francis ? get_Francis_v( block.first, block.second - 1 ) : std::vector< T >() ) )
+			{
+				for( auto i{ block.first }; i < block.second - 1; ++i )
+					QHQ_NxN_with_shifts( i + 1, i, block.second, block_size );
+			}
 
-		modify_QR_block( sub_diag_1, sub_diag_2, acc, l, block_beg, block_end );
-
-		std::swap( sub_diag_1, sub_diag_2 );
-		// new cond
-
-		if( block_beg >= block_end )
-			break;
+			// Rayleigh shifting back
+			// ======================
+			for( auto i{ block.first }; i < block.second; ++i )
+				m_matrix[ i ][ i ] += mu;
+		}
 	}
 
 	QR_get_eigenvalues( l );
