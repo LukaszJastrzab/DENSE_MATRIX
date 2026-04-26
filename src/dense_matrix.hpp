@@ -136,8 +136,8 @@ private:
 	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, std::vector< T > v = {} );
 	/// method returns Francis step column
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
-	/// 
-	void QR_get_complex_eigenvalue( const size_t shift, std::vector< std::complex< double > >&l );
+	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
+	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< double > >&l );
 
 	/// test methods
 	template< typename U >
@@ -331,9 +331,8 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT
 		const size_t stage_col = m_p_col[ step ];
 
 		const auto pivot{ m_matrix[ eliminating_row ][ stage_col ] };
-		auto pivot_abs{ abs_val( pivot ) };
 
-		if( pivot_abs <= pivot_acc )
+		if( abs_val( pivot ) <= pivot_acc )
 			throw singularity_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
 
 		for( size_t row{ step + 1 }; row < m_rows; ++row )
@@ -351,8 +350,7 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT
 		}
 	}
 
-	auto absv{ abs_val( m_matrix[ m_p_row[ max_steps ] ][ m_p_col[ max_steps ] ] ) };
-	if( absv <= pivot_acc )
+	if( abs_val( m_matrix[ m_p_row[ max_steps ] ][ m_p_col[ max_steps ] ] ) <= pivot_acc )
 		throw singularity_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
 
 	m_dynamic_state = DYNAMIC_STATE::LU_DECOMPOSED;
@@ -554,7 +552,7 @@ void dense_matrix< T >::QHQ_decomposition()
 
 
 template< typename T >
-void dense_matrix< T >::QR_get_complex_eigenvalue( const size_t shift, std::vector< std::complex< double > >& l )
+void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< double > >& l )
 {
 	std::complex< double > a{ m_matrix[ shift ][ shift ] }, b{ m_matrix[ shift ][ shift + 1 ] },
 		c{ m_matrix[ shift + 1 ][ shift ] }, d{ m_matrix[ shift + 1 ][ shift + 1 ] };
@@ -575,7 +573,7 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > 
 	{
 		if( i < m_cols - 1 && abs_val( m_matrix[ i + 1 ][ i ] ) > DEFLATION_ACC )
 		{
-			QR_get_complex_eigenvalue( i, l );
+			QR_get_eigenvalues_from_block( i, l );
 			i += 2;
 		}
 		else
@@ -739,6 +737,19 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 				}
 			}
 		}
+
+		// remove block which sizes are <= 2
+		// =================================
+		for( auto it = blocks.begin(); it != blocks.end(); )
+		{
+			if( it->second.second - it->second.first <= 2 )
+				it = blocks.erase( it );
+			else
+				++it;
+		}
+
+		if( blocks.size() == 0 )
+			break;
 
 		for( const auto& [ id, block ] : blocks )
 		{
