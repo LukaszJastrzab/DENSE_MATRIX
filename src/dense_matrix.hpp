@@ -724,8 +724,8 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 			for( auto i{ block.first }; i < block.second - 1; ++i )
 			{
 				auto ii{ i + 1 };
-				const double a{ abs_val( get_real( m_matrix[ i ][ i ] ) ) },
-					b{ abs_val( get_real( m_matrix[ ii ][ ii ] ) ) },
+				const double a{ abs_val( m_matrix[ i ][ i ] ) },
+					b{ abs_val( m_matrix[ ii ][ ii ] ) },
 					c{ abs_val( m_matrix[ ii ][ i ] ) };
 
 				if( c <= acc * ( a + b ) )

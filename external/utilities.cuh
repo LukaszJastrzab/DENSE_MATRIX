@@ -52,24 +52,6 @@ struct double_type< std::complex< T > >
 };
 
 template< typename T >
-struct is_complex : std::false_type {};
-
-template< typename T >
-struct is_complex< std::complex< T > > : std::true_type {};
-
-template< typename T >
-inline T get_real( T x )
-{
-    return x;
-}
-
-template< typename T >
-inline T get_real( const std::complex< T >& x )
-{
-    return x.real();
-}
-
-template< typename T >
 #ifdef __CUDACC__
 __host__ __device__ __forceinline__
 #else
@@ -144,15 +126,6 @@ std::complex< T > conjugate( const std::complex< T >& x )
 
 
 #ifdef __CUDACC__
-
-template< typename T >
-struct is_complex< thrust::complex< T > > : std::true_type {};
-
-template< typename T >
-inline T get_real( const thrust::complex< T >& x )
-{
-    return x.real();
-}
 
 template< typename T >
 struct real_type< thrust::complex< T > >
