@@ -113,20 +113,25 @@ protected:
 
 	// tested matrix
 	dense_matrix< T > A;
-	dense_matrix< complex< double > > A_, Il;
+	dense_matrix< complex< double > > A_, IL;
 
 	// needed vectors
 	vector< DT > b, x, r;
-	vector< complex< double > > l;
+	vector< complex< double > > L;
 
 	double low_val{ 0.01 }, high_val{ 100.0 };
 
-	// gets desire accuracy
-	RT get_acc() { return std::is_same_v< RT, float > ? 0.01 : 0.00001; }
 	// matrix size
-	virtual size_t get_mx_size() { return 8; }
+	virtual size_t get_mx_size() { return 10; }
+	// gets desire accuracy
+	virtual RT get_acc() { return  static_cast< RT >( get_mx_size() ) * ( std::is_same_v< RT, float > ? 0.001 : 0.000001 ); }
 	// matrix creation
 	virtual void create_matrix() = 0;
+	// decomposition for sinularity verification
+	virtual void singularity_verification( dense_matrix< complex< double > >& A_IL )
+	{
+		EXPECT_THROW( A_IL.LU_decomposition( true, 0, get_acc() ), singularity_error );
+	}
 
 
 	void SetUp() override
@@ -140,14 +145,27 @@ protected:
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
 		A_.init( get_mx_size(), get_mx_size() );
-		Il.init( get_mx_size(), get_mx_size() );
+		IL.init( get_mx_size(), get_mx_size() );
 
 		create_matrix();
 	}
 
 	void TearDown() override
 	{
-		EXPECT_TRUE( true );
+		// verification each computed eigen value 
+		// if "l" is an eigen value then matrix (A - Il) is singular
+		// so LU_decomposition should throw runtime error "obtained singular matrix"
+		// =========================================================================
+		for( size_t i{ 0 }; i < get_mx_size(); ++i )
+		{
+			for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+				IL.set_element( L[ i ], rc, rc );
+
+			// if L is an eigenvalue of A (=A_) then matrix: A - IL should be singular
+			// =======================================================================
+			auto A_IL{ A_ - IL };
+			singularity_verification( A_IL );
+		}
 	}
 };
 
@@ -178,26 +196,16 @@ protected:
 
 TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 
-TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Rayleigh )
+TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
-	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
-	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, false ) );
+}
 
-	// verification each computed eigen value 
-	// if "l" is an eigen value then matrix (A - Il) is singular
-	// so LU_decomposition should throw runtime error "obtained singular matrix"
-	// =========================================================================
-	for( size_t i{ 0 }; i < get_mx_size(); ++i )
-	{
-		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-			Il.set_element( l[ i ], rc, rc );
-
-		auto A_Il{ A_ - Il };
-
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
-	}
+TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
 }
 
 template< typename T >
@@ -219,24 +227,39 @@ class complex_eigenvalue_problem : public eigenvalues_test< T >
 
 TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
 
-TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Rayleigh )
+TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
-	// decompose A=QHQ using Householder algorithm ( H is in Hessenberg form )
-	EXPECT_NO_THROW( A.QHQ_decomposition() );
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR_with_RShift( l, 1500 ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, false ) );
+}
 
-	// verification each computed eigen value 
-	// if "l" is an eigen value then matrix (A - Il) is singular
-	// so LU_decomposition should throw runtime error "obtained singular matrix"
-	// =========================================================================
-	for( size_t i{ 0 }; i < get_mx_size(); ++i )
+TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
+}
+
+template< typename T >
+class general_eigenvalue_problem : public eigenvalues_test< T >
+{
+protected:
+	// matrix creation
+	virtual void create_matrix() override
 	{
-		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-			Il.set_element( l[ i ], rc, rc );
-
-		auto A_Il{ A_ - Il };
-
-		EXPECT_THROW( A_Il.LU_decomposition( true, 0, get_acc() ), std::runtime_error );
+		for( size_t row{ 0 }; row < get_mx_size(); ++row )
+			for( size_t col{ 0 }; col < get_mx_size(); ++col )
+			{
+				auto val{ generate_random< T >( low_val, high_val ) };
+				A.set_element( val, row, col );
+				A_.set_element( static_cast< complex< double > >( val ), row, col );
+			}
 	}
+};
+
+TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
+
+TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
 }
