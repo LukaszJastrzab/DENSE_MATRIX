@@ -51,14 +51,14 @@ public:
 	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
 	/// decomposes matrix "in situ" to factors LU using Gauss elimination
-	void LU_decomposition( bool scaling, size_t pivoting_rows = 0, RT pivot_acc = std::numeric_limits< RT >::epsilon() );
+	void LU_decomposition( const bool scaling, size_t pivoting_rows = 0, const RT singularity_acc = std::numeric_limits< RT >::epsilon() );
 	/// method solves LU problem (LU_decomposition is needed to call before)
 	void solve_LU( std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >* y = nullptr ) const;
 	/// method computes determinant using LU decomposition
 	typename double_type< T >::type det() const;
 
 	/// decomposes matrix "in situ" to factors QR using Householder method
-	void QR_decomposition( bool scaling );
+	void QR_decomposition( const bool scaling, const RT singularity_acc = std::numeric_limits< RT >::epsilon() );
 	/// solves equation Ax=b, where A is decomposed to factors QR (by Householders method)
 	void solve_QR( std::vector< DT >& x, const std::vector< DT >& b ) const;
 
@@ -298,7 +298,7 @@ void dense_matrix< T >::choose_pivot( const size_t step, const size_t search )
 }
 
 template< typename T >
-void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT pivot_acc )
+void dense_matrix< T >::LU_decomposition( const bool scaling, size_t pivoting_rows, const RT singularity_acc )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::LU_decomposition: INIT state is required" );
@@ -332,7 +332,7 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT
 
 		const auto pivot{ m_matrix[ eliminating_row ][ stage_col ] };
 
-		if( abs_val( pivot ) <= pivot_acc )
+		if( abs_val( pivot ) <= singularity_acc )
 			throw singularity_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
 
 		for( size_t row{ step + 1 }; row < m_rows; ++row )
@@ -350,7 +350,7 @@ void dense_matrix< T >::LU_decomposition( bool scaling, size_t pivoting_rows, RT
 		}
 	}
 
-	if( abs_val( m_matrix[ m_p_row[ max_steps ] ][ m_p_col[ max_steps ] ] ) <= pivot_acc )
+	if( abs_val( m_matrix[ m_p_row[ max_steps ] ][ m_p_col[ max_steps ] ] ) <= singularity_acc )
 		throw singularity_error( "dense_matrix< T >::LU_decomposition - a singular matrix was obtained" );
 
 	m_dynamic_state = DYNAMIC_STATE::LU_DECOMPOSED;
@@ -782,7 +782,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 
 template< typename T >
-void dense_matrix< T >::QR_decomposition( bool scaling )
+void dense_matrix< T >::QR_decomposition( const bool scaling, const RT singularity_acc )
 {
 	if( m_dynamic_state != DYNAMIC_STATE::INIT )
 		throw std::invalid_argument( "dense_matrix< T >::QR_decomposition() - m_dynamic_state != DYNAMIC_STATE::INIT" );
@@ -816,6 +816,9 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 		}
 		col_norm = std::sqrt( col_norm );
 
+		if ( col_norm < singularity_acc )
+			throw singularity_error( "dense_matrix< T >::QR_decomposition - a singular matrix was obtained" );
+
 		// stabilization sign calculation
 		// ==============================
 		double alpha_abs = abs_val( m_matrix[ step ][ step ] );
@@ -832,7 +835,6 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 		// store additional required by QR decomposition data 
 		// ==================================================
 		m_betas[ step ] = static_cast< RT >( 2.0 ) / vTv;
-
 
 		// apply the Householder transformation to the remaining submatrix
 		// only needed operations "in situ"
@@ -862,6 +864,9 @@ void dense_matrix< T >::QR_decomposition( bool scaling )
 			for( size_t c{ step + 1 }; c < m_cols; ++c )
 				m_matrix[ r ][ c ] -= m_betas[ step ] * m_matrix[ r ][ step ] * vTA[ c ];
 	}
+
+	if( abs_val( m_matrix[ max_steps ][ max_steps ] ) < singularity_acc )
+		throw singularity_error( "dense_matrix< T >::QR_decomposition - a singular matrix was obtained" );
 
 	m_dynamic_state = DYNAMIC_STATE::QR_DECOMPOSED;
 }
