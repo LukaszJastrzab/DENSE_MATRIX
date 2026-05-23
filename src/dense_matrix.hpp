@@ -65,7 +65,7 @@ public:
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 	/// computes eqigen values using QR algorithm
-	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const size_t max_it, const bool Francis = true,
+	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* V, const size_t max_it, const bool Francis = true,
 								 const double acc = std::numeric_limits< RT >::epsilon() );
 
 	/// Method improves the accuracy of the solution
@@ -138,6 +138,8 @@ private:
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
 	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
 	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< double > >&l );
+	/// method used for creation of Schur vectors during QR algorithm
+	void apply_VQ_step( dense_matrix & V, const size_t row_step, const size_t col_step, const size_t col_len, std::vector< T > *v );
 
 	/// test methods
 	template< typename U >
@@ -685,7 +687,47 @@ std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const siz
 }
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, const size_t max_it, const bool Francis, const double acc )
+void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_step, const size_t col_step, size_t col_len, std::vector< T >* v )
+{
+	if( m_rows != V.m_rows || m_cols != V.m_cols )
+		throw std::invalid_argument( "dense_matrix< T >::apply_VQ_step - m_rows != V.m_rows || m_cols != V.m_cols" );
+
+	std::vector< T > Vv( m_rows, T{} );
+	T beta{};
+
+	const size_t step_end{ std::min( row_step + col_len, m_rows ) };
+
+	std::vector< T > reflector;
+	if( v == nullptr )
+	{
+		beta = m_betas[ col_step ];
+		reflector.resize( col_len );
+		reflector[ 0 ] = m_v_firsts[ col_step ];
+		for( size_t i{ 1 }; i < col_len; ++i )
+			reflector[ i ] = m_matrix[ row_step + i ][ col_step ];
+		v = &reflector;
+	}
+	else
+	{
+		// to do
+	}
+
+	// calculate Vv
+	//=============
+	for( size_t r{ 0 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < m_cols - row_step; ++c )
+			Vv[ r ] += V.m_matrix[ r ][ row_step +  c ] * ( *v )[ c ];
+
+	// update V matrix
+	// ===============
+	for( size_t c{ 0 }; c < m_cols - row_step; ++c )
+		for( size_t r{ 0 }; r < m_rows; ++r )
+			V.m_matrix[ r ][ row_step + c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c ] );
+
+}
+
+template< typename T >
+void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* V, const size_t max_it, const bool Francis, const double acc )
 {
 	if( m_rows != m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_rows != m_cols" );
@@ -699,6 +741,18 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 	const auto block_size = Francis ? 3 : 2;
 	l.resize( m_rows, std::complex< double >{} );
+
+	// for handling schur/eigen vectors
+	// ================================
+	if( V != nullptr )
+	{
+		V->init( m_rows, m_cols );
+		for( size_t i{ 0 }; i < m_rows; ++i )
+			V->set_element( T{ 1 }, i, i );
+
+		for( size_t step{ 0 }; step < m_rows - 2; ++step )
+			apply_VQ_step( *V, step + 1, step, m_rows - step - 1, nullptr );
+	}
 
 	// vanish elements under lower diag of Hessenberg form
 	// ===================================================
