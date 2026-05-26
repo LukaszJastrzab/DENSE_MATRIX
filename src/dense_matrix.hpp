@@ -139,7 +139,7 @@ private:
 	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
 	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< double > >&l );
 	/// method used for creation of Schur vectors during QR algorithm
-	void apply_VQ_step( dense_matrix & V, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T > *v, T beta );
+	void apply_VQ_step( dense_matrix & V, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T > *v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
 
 	/// test methods
 	template< typename U >
@@ -638,7 +638,7 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
 
 	if( V != nullptr )
-		apply_VQ_step( *V, row_shift, col_shift, v.size(), &v, beta );
+		apply_VQ_step( *V, row_shift, col_shift, v.size(), &v, beta, block_end );
 
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
@@ -690,14 +690,13 @@ std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const siz
 }
 
 template< typename T >
-void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, const size_t col_shift, size_t col_len, std::vector< T >* v, T beta )
+void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, const size_t col_shift, size_t col_len, std::vector< T >* v, T beta, size_t block_end )
 {
 	if( m_rows != V.m_rows || m_cols != V.m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::apply_VQ_step - m_rows != V.m_rows || m_cols != V.m_cols" );
 
-	std::vector< T > Vv( m_rows, T{} );
-
-	const size_t step_end{ std::min( row_shift + col_len, m_rows ) };
+	const auto row_end{ std::min( block_end, m_rows ) };
+	std::vector< T > Vv( row_end, T{} );
 
 	std::vector< T > reflector;
 	if( v == nullptr )
@@ -710,17 +709,19 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, 
 		v = &reflector;
 	}
 
+	const auto col_end{ std::min( v->size() + row_shift, m_cols ) };
+
 	// calculate Vv
 	//=============
-	for( size_t r{ 0 }; r < m_rows; ++r )
-		for( size_t c{ 0 }; c < v->size(); ++c )
-			Vv[ r ] += V.m_matrix[ r ][ row_shift +  c ] * ( *v )[ c ];
+	for( size_t r{ 0 }; r < row_end; ++r )
+		for( size_t c{ row_shift }; c < col_end; ++c )
+			Vv[ r ] += V.m_matrix[ r ][ c ] * ( *v )[ c - row_shift ];
 
 	// update V matrix
 	// ===============
-	for( size_t c{ 0 }; c < v->size(); ++c )
-		for( size_t r{ 0 }; r < m_rows; ++r )
-			V.m_matrix[ r ][ row_shift + c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c ] );
+	for( size_t r{ 0 }; r < row_end; ++r )
+		for( size_t c{ row_shift }; c < col_end; ++c )
+			V.m_matrix[ r ][ c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c - row_shift ] );
 
 }
 
