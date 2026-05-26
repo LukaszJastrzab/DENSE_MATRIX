@@ -133,13 +133,13 @@ private:
 	/// method dumps eigen values during QR algorithm
 	void QR_get_eigenvalues( std::vector< std::complex< double > >& l );
 	/// method used buble racing in QR algorithm for eigenvalues problem
-	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, std::vector< T > v = {} );
+	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, dense_matrix *V, std::vector< T > v = {} );
 	/// method returns Francis step column
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
 	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
 	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< double > >&l );
 	/// method used for creation of Schur vectors during QR algorithm
-	void apply_VQ_step( dense_matrix & V, const size_t row_step, const size_t col_step, const size_t col_len, std::vector< T > *v );
+	void apply_VQ_step( dense_matrix & V, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T > *v, T beta );
 
 	/// test methods
 	template< typename U >
@@ -588,7 +588,7 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< double > 
 
 
 template< typename T >
-bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, const size_t block_size, std::vector< T > v )
+bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, const size_t block_size, dense_matrix* V, std::vector< T > v )
 {
 	const auto row_nshift{ row_shift + 1 };
 	const auto col_nshift{ col_shift + 1 };
@@ -636,6 +636,9 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 		return false;
 
 	const auto beta{ static_cast< RT >( 2.0 ) / vTv };
+
+	if( V != nullptr )
+		apply_VQ_step( *V, row_shift, col_shift, v.size(), &v, beta );
 
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
@@ -687,42 +690,37 @@ std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const siz
 }
 
 template< typename T >
-void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_step, const size_t col_step, size_t col_len, std::vector< T >* v )
+void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, const size_t col_shift, size_t col_len, std::vector< T >* v, T beta )
 {
 	if( m_rows != V.m_rows || m_cols != V.m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::apply_VQ_step - m_rows != V.m_rows || m_cols != V.m_cols" );
 
 	std::vector< T > Vv( m_rows, T{} );
-	T beta{};
 
-	const size_t step_end{ std::min( row_step + col_len, m_rows ) };
+	const size_t step_end{ std::min( row_shift + col_len, m_rows ) };
 
 	std::vector< T > reflector;
 	if( v == nullptr )
 	{
-		beta = m_betas[ col_step ];
+		beta = m_betas[ col_shift ];
 		reflector.resize( col_len );
-		reflector[ 0 ] = m_v_firsts[ col_step ];
+		reflector[ 0 ] = m_v_firsts[ col_shift ];
 		for( size_t i{ 1 }; i < col_len; ++i )
-			reflector[ i ] = m_matrix[ row_step + i ][ col_step ];
+			reflector[ i ] = m_matrix[ row_shift + i ][ col_shift ];
 		v = &reflector;
-	}
-	else
-	{
-		// to do
 	}
 
 	// calculate Vv
 	//=============
 	for( size_t r{ 0 }; r < m_rows; ++r )
-		for( size_t c{ 0 }; c < m_cols - row_step; ++c )
-			Vv[ r ] += V.m_matrix[ r ][ row_step +  c ] * ( *v )[ c ];
+		for( size_t c{ 0 }; c < v->size(); ++c )
+			Vv[ r ] += V.m_matrix[ r ][ row_shift +  c ] * ( *v )[ c ];
 
 	// update V matrix
 	// ===============
-	for( size_t c{ 0 }; c < m_cols - row_step; ++c )
+	for( size_t c{ 0 }; c < v->size(); ++c )
 		for( size_t r{ 0 }; r < m_rows; ++r )
-			V.m_matrix[ r ][ row_step + c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c ] );
+			V.m_matrix[ r ][ row_shift + c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c ] );
 
 }
 
@@ -751,7 +749,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 			V->set_element( T{ 1 }, i, i );
 
 		for( size_t step{ 0 }; step < m_rows - 2; ++step )
-			apply_VQ_step( *V, step + 1, step, m_rows - step - 1, nullptr );
+			apply_VQ_step( *V, step + 1, step, m_rows - step - 1, nullptr, T{} );
 	}
 
 	// vanish elements under lower diag of Hessenberg form
@@ -815,11 +813,11 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 			// QR Hessenberg reduction
 			// =======================
-			if( QHQ_NxN_with_shifts( block.first, block.first, block.second, block_size,
+			if( QHQ_NxN_with_shifts( block.first, block.first, block.second, block_size, V,
 				Francis ? get_Francis_v( block.first, block.second - 1 ) : std::vector< T >() ) )
 			{
 				for( auto i{ block.first }; i < block.second - 1; ++i )
-					QHQ_NxN_with_shifts( i + 1, i, block.second, block_size );
+					QHQ_NxN_with_shifts( i + 1, i, block.second, block_size, V );
 			}
 
 			// Rayleigh shifting back
