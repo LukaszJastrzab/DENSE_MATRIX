@@ -133,7 +133,7 @@ protected:
 		EXPECT_THROW( A_IL.LU_decomposition( true, 0, get_acc() ), singularity_error );
 	}
 
-
+	// common actions before main test
 	void SetUp() override
 	{
 		if( std::is_same_v< real_type< T >::type, double > )
@@ -150,6 +150,7 @@ protected:
 		create_matrix();
 	}
 
+	// common actions after main test
 	void TearDown() override
 	{
 		// verification each computed eigen value 
@@ -244,7 +245,7 @@ class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// Schur / eigen vectors
-	dense_matrix< T > V;
+	dense_matrix< T > V, VT;
 	// matrix size
 	virtual size_t get_mx_size() { return 5; }
 	// matrix creation
@@ -258,6 +259,15 @@ protected:
 				A_.set_element( static_cast< complex< double > >( val ), row, col );
 			}
 	}
+
+	// common actions after main test
+	void TearDown() override
+	{
+		VT = V;
+		VT.hermitian_transpose();
+		auto A_check = V * A * VT;
+	}
+
 };
 
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
@@ -266,4 +276,6 @@ TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
 	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &V, 100, true ) );
+
+
 }

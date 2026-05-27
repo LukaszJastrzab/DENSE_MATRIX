@@ -18,7 +18,8 @@ enum class DYNAMIC_STATE : int
 	LU_DECOMPOSED,
 	QR_DECOMPOSED,
 	QHQ_DECOMPOSED,
-	QUASI_QR
+	QUASI_QR,
+	SCHUR_VECTORS
 };
 
 template< typename T >
@@ -68,8 +69,15 @@ public:
 	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* V, const size_t max_it, const bool Francis = true,
 								 const double acc = std::numeric_limits< RT >::epsilon() );
 
-	/// Method improves the accuracy of the solution
+	/// method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
+
+	/// tarnsposition
+	void transpose();
+	/// conjugates all matrix elements
+	void conjugation();
+	/// performs hermitan transposition
+	void hermitian_transpose();
 
 	/// addition operator
 	template< typename U, typename V >
@@ -170,6 +178,37 @@ void dense_matrix< T >::set_element( T value, size_t row, size_t col )
 
 	m_matrix[ row ][ col ] = value;
 }
+
+template< typename T >
+void dense_matrix< T >::transpose()
+{
+	std::vector< std::vector < T > > t_matrix( m_cols, std::vector< T >( m_rows ) );
+
+	for( size_t r{ 0 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < m_cols; ++c )
+			t_matrix[ c ][ r ] = m_matrix[ r ][ c ];
+
+	std::swap( m_rows, m_cols );
+	std::swap( m_p_row, m_p_row );
+
+	m_matrix = std::move( t_matrix );
+}
+
+template< typename T >
+void dense_matrix< T >::conjugation()
+{
+	for( size_t r{ 0 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < m_cols; ++c )
+			m_matrix[ r ][ c ] = conjugate( m_matrix[ r ][ c ] );
+}
+
+template< typename T >
+void dense_matrix< T >::hermitian_transpose()
+{
+	transpose();
+	conjugation();
+}
+
 
 template< typename U, typename V >
 dense_matrix< std::common_type_t< U, V > > operator+( const dense_matrix< U >& A, const dense_matrix< V >& B )
@@ -642,13 +681,13 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 
 	// A' <- A - beta * v * ( vT * A )
 	// ===============================
-	std::vector< T > vTA( block_end, T{} );
+	std::vector< T > vTA( m_cols, T{} );
 
-	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < block_end; ++c )
-		for ( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i )
+	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < m_cols; ++c )
+		for( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i )
 			vTA[ c ] += vT[ i - row_shift ] * m_matrix[ i ][ c ];
 
-	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < block_end; ++c )
+	for( size_t c{ use_spec_v ? col_shift : col_nshift }; c < m_cols; ++c )
 		for( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i)
 			m_matrix[ i ][ c ] -= beta * v[ i - row_shift ] * vTA[ c ];
 
@@ -661,7 +700,7 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 			Av[ r ] += m_matrix[ r ][ i ] * v[ i - row_shift ];
 
 	for( size_t r{ 0 }; r < std::min( row_nshift + block_size, block_end ); ++r )
-		for( size_t i{ row_shift }; i < min( m_rows, row_shift + block_size ); ++i )
+		for( size_t i{ row_shift }; i < min( m_cols, row_shift + block_size ); ++i )
 			m_matrix[ r ][ i ] -= beta * Av[ r ] * vT[ i - row_shift ];
 
 	return true;
@@ -695,8 +734,7 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, 
 	if( m_rows != V.m_rows || m_cols != V.m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::apply_VQ_step - m_rows != V.m_rows || m_cols != V.m_cols" );
 
-	const auto row_end{ std::min( block_end, m_rows ) };
-	std::vector< T > Vv( row_end, T{} );
+	std::vector< T > Vv( m_rows, T{} );
 
 	std::vector< T > reflector;
 	if( v == nullptr )
@@ -713,13 +751,13 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, 
 
 	// calculate Vv
 	//=============
-	for( size_t r{ 0 }; r < row_end; ++r )
+	for( size_t r{ 0 }; r < m_rows; ++r )
 		for( size_t c{ row_shift }; c < col_end; ++c )
 			Vv[ r ] += V.m_matrix[ r ][ c ] * ( *v )[ c - row_shift ];
 
 	// update V matrix
 	// ===============
-	for( size_t r{ 0 }; r < row_end; ++r )
+	for( size_t r{ 0 }; r < m_rows; ++r )
 		for( size_t c{ row_shift }; c < col_end; ++c )
 			V.m_matrix[ r ][ c ] -= beta * Vv[ r ] * conjugate( ( *v )[ c - row_shift ] );
 
@@ -755,15 +793,9 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 	// vanish elements under lower diag of Hessenberg form
 	// ===================================================
-	for( size_t i{ 0 }; i < m_rows - 2; ++i )
-		m_matrix[ i + 2 ][ i ] = T{};
-
-	// vanish elements yet under lower diag of Hessenberg form
-	// in case of double shift usage
-	// =======================================================
-	if ( Francis )
-		for( size_t i{ 0 }; i < m_rows - 3; ++i )
-			m_matrix[ i + 3 ][ i ] = T{};
+	for( size_t r{ 2 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < r - 1; ++c )
+			m_matrix[ r ][ c ] = T{};
 
 	size_t block_idx{ 0 };
 	blocks[ block_idx++ ] = ull_pair( 0, m_rows );
@@ -829,6 +861,9 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 	}
 
 	QR_get_eigenvalues( l );
+
+	if( V != nullptr )
+		V->m_dynamic_state = DYNAMIC_STATE::SCHUR_VECTORS;
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
 }
