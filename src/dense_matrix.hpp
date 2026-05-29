@@ -67,7 +67,7 @@ public:
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 	/// computes eqigen values using QR algorithm
-	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* V, const size_t max_it = 1000, const bool Francis = true, const double acc = std::numeric_limits< RT >::epsilon(), DYNAMIC_STATE V_type = DYNAMIC_STATE::SCHUR_VECTORS );
+	void compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* SV, dense_matrix* EV, const size_t max_it = 1000, const bool Francis = true, const double acc = std::numeric_limits< RT >::epsilon() );
 
 	/// method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -149,7 +149,7 @@ private:
 	/// method used for creation of Schur vectors during QR algorithm
 	void apply_VQ_step( dense_matrix& V, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T > *v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
 	/// computes eigen vectors from given, QUASI_QR matrix, Schur vectors and eigen values ( used in QR algorithm)
-	void compute_eigenvectors( dense_matrix& V, const std::vector< std::complex< double > >& l, const std::map< size_t, size_t >& blocks );
+	void compute_eigenvectors( dense_matrix& EV, const dense_matrix& SV, const std::vector< std::complex< double > >& l, const std::map< size_t, size_t >& blocks );
 
 	/// test methods
 	template< typename U >
@@ -769,26 +769,35 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& V, const size_t row_shift, 
 }
 
 template< typename T >
-void  dense_matrix< T >::compute_eigenvectors( dense_matrix& V, const std::vector< std::complex< double > >& l, const std::map< size_t, size_t >& blocks )
+void  dense_matrix< T >::compute_eigenvectors( dense_matrix& EV, const dense_matrix& SV, const std::vector< std::complex< double > >& l, const std::map< size_t, size_t >& blocks )
 {
-	dense_matrix< T > EV( m_rows, m_cols );
+	const complex< double > val{ 1 };
 
 	for( size_t i{ 0 }; i < l.size(); ++i )
 	{
+		const auto lambda{ l[ i ] };
 		auto blockIt = blocks.find( i );
 		if( blockIt == blocks.end() )
 			blockIt = blocks.find( i - 1 );
 		if( blockIt == blocks.end() )
 			throw std::runtime_error( " dense_matrix< T >::compute_eigenvectors - wrong block data" );
 
-		size_t this_block_size{ blockIt->second - blockIt->first };
+		const size_t this_block_size{ blockIt->second - blockIt->first };
+		const size_t i0{ blockIt->first }, i1{ blockIt->second };
 
 		switch( this_block_size )
 		{
 		case 1:
+			//EV.m_matrix[ i0 ][ i0 ] = val;
 			break;
 		case 2:
-			break;
+			{
+				//const auto mi0{ std::complex< double >( m_matrix[ i0 ][ i0 ] ) - lambda };
+				//const auto mi1{ m_matrix[ i1 ][ i1 ] - lambda };
+				//EV.m_matrix[ i0 ][ i0 ] = -val * ( abs( mi0 ) > abs( m_matrix[ i1 ][ i0 ] ) ? m_matrix[ i0 ][ i1 ] / mi0 : mi1 / m_matrix[ i1 ][ i0 ] );
+				//EV.m_matrix[ i1 ][ i0 ] = val;
+				break;
+			}
 		default:
 			throw std::runtime_error( " dense_matrix< T >::compute_eigenvectors - wrong block data" );
 		}
@@ -798,18 +807,13 @@ void  dense_matrix< T >::compute_eigenvectors( dense_matrix& V, const std::vecto
 
 
 	}
-
-	V = std::move( EV );
-
 }
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* V, const size_t max_it, const bool Francis, const double acc, DYNAMIC_STATE V_type )
+void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< double > >& l, dense_matrix* SV, dense_matrix* EV, const size_t max_it, const bool Francis, const double acc )
 {
 	if( m_rows != m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_rows != m_cols" );
-	if ( V != nullptr && V_type != DYNAMIC_STATE::SCHUR_VECTORS && V_type != DYNAMIC_STATE::EIGEN_VECTORS )
-		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - wrong additional calcs data requested" );
 	if( m_dynamic_state == DYNAMIC_STATE::INIT )
 		QHQ_decomposition();
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
@@ -820,14 +824,14 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 	// for handling schur/eigen vectors
 	// ================================
-	if( V != nullptr )
+	if( SV != nullptr )
 	{
-		V->init( m_rows, m_cols );
+		SV->init( m_rows, m_cols );
 		for( size_t i{ 0 }; i < m_rows; ++i )
-			V->set_element( T{ 1 }, i, i );
+			SV->set_element( T{ 1 }, i, i );
 
 		for( size_t step{ 0 }; step < m_rows - 2; ++step )
-			apply_VQ_step( *V, step + 1, step, m_rows - step - 1, nullptr, T{} );
+			apply_VQ_step( *SV, step + 1, step, m_rows - step - 1, nullptr, T{} );
 	}
 
 	// vanish elements under lower diag of Hessenberg form
@@ -889,11 +893,11 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 			// QR Hessenberg reduction
 			// =======================
-			if( QHQ_NxN_with_shifts( block_begin, block_begin, block_end, block_size, V,
+			if( QHQ_NxN_with_shifts( block_begin, block_begin, block_end, block_size, SV,
 				Francis ? get_Francis_v( block_begin, block_end - 1 ) : std::vector< T >() ) )
 			{
 				for( auto i{ block_begin }; i < block_end - 1; ++i )
-					QHQ_NxN_with_shifts( i + 1, i, block_end, block_size, V );
+					QHQ_NxN_with_shifts( i + 1, i, block_end, block_size, SV );
 			}
 
 			// Rayleigh shifting back
@@ -905,11 +909,11 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< doubl
 
 	QR_get_eigenvalues( l, final_blocks );
 
-	if( V != nullptr )
-		V->m_dynamic_state = DYNAMIC_STATE::SCHUR_VECTORS;
+	if( SV != nullptr )
+		SV->m_dynamic_state = DYNAMIC_STATE::SCHUR_VECTORS;
 
-	if( V != nullptr && V_type == DYNAMIC_STATE::EIGEN_VECTORS )
-		compute_eigenvectors( *V, l, final_blocks );
+	if( SV != nullptr && EV != nullptr )
+		compute_eigenvectors( *EV, *SV, l, final_blocks );
 
 	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
 }

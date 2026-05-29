@@ -200,13 +200,13 @@ TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, nullptr, 100, false ) );
 }
 
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, nullptr, 100, true ) );
 }
 
 template< typename T >
@@ -231,13 +231,13 @@ TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, nullptr, 100, false ) );
 }
 
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, nullptr, 100, true ) );
 }
 
 template< typename T >
@@ -245,7 +245,7 @@ class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// Schur / eigen vectors
-	dense_matrix< T > V, VT;
+	dense_matrix< T > SV, SVT;
 	// matrix size
 	virtual size_t get_mx_size() { return 5; }
 	// matrix creation
@@ -263,9 +263,9 @@ protected:
 	// common actions after main test
 	void TearDown() override
 	{
-		VT = V;
-		VT.hermitian_transpose();
-		auto A_check = V * A * VT;
+		SVT = SV;
+		SVT.hermitian_transpose();
+		auto A_check = SV * A * SVT;
 	}
 
 };
@@ -275,7 +275,7 @@ TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &V, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, nullptr, 100, true ) );
 
 
 }
