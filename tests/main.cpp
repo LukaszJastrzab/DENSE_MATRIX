@@ -115,6 +115,11 @@ protected:
 	dense_matrix< T > A;
 	dense_matrix< complex< double > > A_, IL;
 
+	// Schur vectors
+	dense_matrix< T > SV, SVT;
+	// eigenvectors
+	dense_matrix< complex< double > > EV, EVT;
+
 	// needed vectors
 	vector< DT > b, x, r;
 	vector< complex< double > > L;
@@ -174,6 +179,8 @@ template< typename T >
 class hermitian_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 5; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -200,7 +207,7 @@ TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, nullptr, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, nullptr, &EV, 100, false ) );
 }
 
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
@@ -244,8 +251,6 @@ template< typename T >
 class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
-	// Schur / eigen vectors
-	dense_matrix< T > SV, SVT;
 	// matrix size
 	virtual size_t get_mx_size() { return 5; }
 	// matrix creation
@@ -276,6 +281,4 @@ TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
 	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, nullptr, 100, true ) );
-
-
 }
