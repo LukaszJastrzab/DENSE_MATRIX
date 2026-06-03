@@ -154,7 +154,7 @@ private:
 	/// method used for creation of Schur vectors during QR algorithm
 	void apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T > *v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
 	/// computes eigen vectors from given, QUASI_QR matrix, Schur vectors and eigen values ( used in QR algorithm)
-	void compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const;
+	void compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix< T >& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const;
 
 	/// test methods
 	template< typename U >
@@ -266,7 +266,7 @@ dense_matrix< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A
 		{
 			R mult_sum{};
 			for( size_t i{ 0 }; i < A.m_cols; ++i )
-				mult_sum += A.m_matrix[ r ][ i ] * B.m_matrix[ i ][ c ];
+				mult_sum += static_cast< R >( A.m_matrix[ r ][ i ] ) * static_cast< R >( B.m_matrix[ i ][ c ] );
 			result.set_element( mult_sum, r, c );
 		}
 
@@ -774,9 +774,10 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& SV, const size_t row_shift,
 }
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const
+void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix< T >& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const
 {
 	EV.init( m_rows, m_cols );
+	dense_matrix< DC > V( m_rows, m_cols );
 
 	const DC val{ 1 };
 
@@ -795,16 +796,16 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 		switch( this_block_size )
 		{
 		case 1:
-			EV.m_matrix[ i ][ i0 ] = val;
+			V.m_matrix[ i ][ i0 ] = val;
 			break;
 		case 2:
 			{
 				const auto mi0{ static_cast< DC >( m_matrix[ i0 ][ i0 ] ) - lambda };
 				const auto mi1{ static_cast< DC >( m_matrix[ i1 ][ i1 ] ) - lambda };
-				EV.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i1 ][ i0 ] ) ?
-													static_cast< DC >( m_matrix[ i0 ][ i1 ] ) / mi0 :
-													mi1 / static_cast< DC >( m_matrix[ i1 ][ i0 ] ) );
-				EV.m_matrix[ i1 ][ i ] = val;
+				V.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i1 ][ i0 ] ) ?
+												 static_cast< DC >( m_matrix[ i0 ][ i1 ] ) / mi0 :
+												 mi1 / static_cast< DC >( m_matrix[ i1 ][ i0 ] ) );
+				V.m_matrix[ i1 ][ i ] = val;
 				break;
 			}
 		default:
@@ -824,8 +825,8 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 				{
 					DC b{};
 					for( size_t j{ j1 }; j < i1; ++j )
-						b -= static_cast< DC >( m_matrix[ j0 ][ j ] ) * EV.m_matrix[ j ][ i ];
-					EV.m_matrix[ j0 ][ i ] = b / static_cast< DC >( m_matrix[ j0 ][ j0 ] );
+						b -= static_cast< DC >( m_matrix[ j0 ][ j ] ) * V.m_matrix[ j ][ i ];
+					V.m_matrix[ j0 ][ i ] = b / static_cast< DC >( m_matrix[ j0 ][ j0 ] );
 					break;
 				}
 			case 2:
@@ -839,6 +840,15 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 			rit++;
 		}
 	}
+
+	for( size_t r{ 0 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < m_cols; ++c )
+		{
+			DC mult_sum{};
+			for( size_t i{ 0 }; i < m_cols; ++i )
+				mult_sum += static_cast< DC >( SV.m_matrix[ r ][ i ] ) * V.m_matrix[ i ][ c ];
+			EV.set_element( mult_sum, r, c );
+		}
 }
 
 template< typename T >
@@ -915,7 +925,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 			if ( b_size == 2 )
 				QR_get_eigenvalues_from_block( i0, l );
 
-			if( b_size == 1 || ( b_size == 2 && l[ i0 ].imag() != 0 ) )
+			if( b_size == 1 || ( b_size == 2 && l[ i0 ].imag() != 0 && l[ i0 ] == conjugate( l[ i0 + 1 ] ) ) )
 			{	
 				final_blocks[ i0 ] = i1;
 				it = blocks.erase( it );
