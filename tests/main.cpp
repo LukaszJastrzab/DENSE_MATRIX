@@ -118,13 +118,12 @@ protected:
 	// Schur vectors
 	dense_matrix< T > SV, SVT;
 	// eigenvectors
-	dense_matrix< complex< double > > EV, EVT;
+	dense_matrix< complex< double > > EV;
 
 	// needed vectors
-	vector< DT > b, x, r;
 	vector< complex< double > > L;
 
-	double low_val{ 0.01 }, high_val{ 100.0 };
+	double low_val{ 0.01 }, high_val{ 100.0 }, eps{ eps_float };
 
 	// matrix size
 	virtual size_t get_mx_size() { return 10; }
@@ -132,11 +131,6 @@ protected:
 	virtual RT get_acc() { return  static_cast< RT >( get_mx_size() ) * ( std::is_same_v< RT, float > ? 0.001 : 0.000001 ); }
 	// matrix creation
 	virtual void create_matrix() = 0;
-	// decomposition for sinularity verification
-	virtual void singularity_verification( dense_matrix< complex< double > >& A_IL )
-	{
-		EXPECT_THROW( A_IL.LU_decomposition( true, 0, get_acc() ), singularity_error );
-	}
 
 	// common actions before main test
 	void SetUp() override
@@ -145,6 +139,7 @@ protected:
 		{
 			low_val = 0.001;
 			high_val = 1000.0;
+			eps = eps_double;
 		}
 
 		// tested matrix
@@ -161,29 +156,13 @@ protected:
 		SVT = SV;
 		SVT.hermitian_transpose();
 		auto schur_residual_check = A_ - SV * A * SVT;
+		EXPECT_LE( schur_residual_check.norm_max() / A_.norm_max(), eps );
 
 		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
 			IL.set_element( L[ rc ], rc, rc );
 
 		auto eigen_residual_check = A_ * EV - EV * IL;
-		EXPECT_TRUE( true );
-
-		/*
-		// verification each computed eigen value 
-		// if "l" is an eigen value then matrix (A - Il) is singular
-		// so LU_decomposition should throw runtime error "obtained singular matrix"
-		// =========================================================================
-		for( size_t i{ 0 }; i < get_mx_size(); ++i )
-		{
-			for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-				IL.set_element( L[ i ], rc, rc );
-
-			// if L is an eigenvalue of A (=A_) then matrix: A - IL should be singular
-			// =======================================================================
-			auto A_IL{ A_ - IL };
-			singularity_verification( A_IL );
-		}
-		*/
+		EXPECT_LE( eigen_residual_check.norm_max() / A_.norm_max(), eps );
 	}
 };
 
@@ -231,6 +210,9 @@ TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
 template< typename T >
 class complex_eigenvalue_problem : public eigenvalues_test< T >
 {
+protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 10; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -264,7 +246,7 @@ class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 5; }
+	virtual size_t get_mx_size() { return 10; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -281,8 +263,8 @@ protected:
 
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 
-//TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
-//{
-//	// compute eigen values for matrix A
-//	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, nullptr, 100, true ) );
-//}
+TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+}

@@ -54,6 +54,9 @@ public:
 	/// adds elements and throws exception if row / col is out of range
 	void set_element( T value, size_t row, size_t col );
 
+	/// max norm
+	double norm_max() const;
+
 	/// it counts value r := Ax - b
 	void count_residual_vector( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 
@@ -184,6 +187,18 @@ void dense_matrix< T >::set_element( T value, size_t row, size_t col )
 		throw std::out_of_range( "dense_matrix< T >::set_element - row >= m_rows || col >= m_cols" );
 
 	m_matrix[ row ][ col ] = value;
+}
+
+template< typename T >
+double dense_matrix< T >::norm_max() const
+{
+	double result{ 0 };
+
+	for( size_t r{ 0 }; r < m_rows; ++r )
+		for( size_t c{ 0 }; c < m_cols; ++c )
+			result = std::max( result, abs_val( m_matrix[ r ][ c ] ) );
+
+	return result;
 }
 
 template< typename T >
@@ -790,47 +805,77 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 		if( blockIt == blocks.end() )
 			throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - wrong block data" );
 
-		const size_t i0{ blockIt->first }, i1{ blockIt->second };
-		const size_t this_block_size{ i1 - i0 };
+		const size_t i0{ blockIt->first }, i01{ blockIt->first + 1 }, i1{ blockIt->second };
+		const size_t lead_block_size{ i1 - i0 };
 
-		switch( this_block_size )
+		switch( lead_block_size )
 		{
-		case 1:
-			V.m_matrix[ i ][ i0 ] = val;
-			break;
-		case 2:
+			case 1:
+				V.m_matrix[ i ][ i0 ] = val;
+				break;
+			case 2:
 			{
 				const auto mi0{ static_cast< DC >( m_matrix[ i0 ][ i0 ] ) - lambda };
-				const auto mi1{ static_cast< DC >( m_matrix[ i1 ][ i1 ] ) - lambda };
-				V.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i1 ][ i0 ] ) ?
-												 static_cast< DC >( m_matrix[ i0 ][ i1 ] ) / mi0 :
-												 mi1 / static_cast< DC >( m_matrix[ i1 ][ i0 ] ) );
-				V.m_matrix[ i1 ][ i ] = val;
+				const auto mi1{ static_cast< DC >( m_matrix[ i01 ][ i01 ] ) - lambda };
+				V.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i01 ][ i0 ] ) ?
+												 static_cast< DC >( m_matrix[ i0 ][ i01 ] ) / mi0 :
+												 mi1 / static_cast< DC >( m_matrix[ i01 ][ i0 ] ) );
+				V.m_matrix[ i01 ][ i ] = val;
 				break;
 			}
-		default:
-			throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - wrong block data" );
+			default:
+				throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - wrong block data" );
 		}
 
 		auto rit = std::make_reverse_iterator( blockIt );
 
 		while( rit != blocks.rend() )
 		{
-			const size_t j0{ rit->first }, j1{ rit->second };
+			const size_t j0{ rit->first }, j01{ rit->first + 1 }, j1{ rit->second };
 			const size_t this_block_size{ j1 - j0 };
 
 			switch( this_block_size )
 			{
-			case 1:
+				case 1:
 				{
 					DC b{};
 					for( size_t j{ j1 }; j < i1; ++j )
 						b -= static_cast< DC >( m_matrix[ j0 ][ j ] ) * V.m_matrix[ j ][ i ];
-					V.m_matrix[ j0 ][ i ] = b / static_cast< DC >( m_matrix[ j0 ][ j0 ] );
+					V.m_matrix[ j0 ][ i ] = b / ( static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda );
 					break;
 				}
-			case 2:
+				case 2:
 				{
+					if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< RT >::epsilon() ||
+						abs_val( lambda - l[ j01 ] ) <= std::numeric_limits< RT >::epsilon() )
+					{
+						// eigen related to other block seems to be the same as currently considered
+						throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - not yet supported" );
+					}
+					else
+					{
+						std::vector< DC > b( this_block_size, DC{} );
+						for( size_t r{ 0 }; r < this_block_size; ++r )
+						{
+							const size_t row{ j0 + r };
+							for( size_t j{ j1 }; j < i1; ++j )
+								b[ r ] -= static_cast< DC >( m_matrix[ row ][ j ] ) * V.m_matrix[ j ][ i ];
+
+							dense_matrix< DC > M2x2( this_block_size, this_block_size );
+							M2x2.m_matrix[ 0 ][ 0 ] = static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda;
+							M2x2.m_matrix[ 0 ][ 1 ] = static_cast< DC >( m_matrix[ j0 ][ j01 ] );
+							M2x2.m_matrix[ 1 ][ 0 ] = static_cast< DC >( m_matrix[ j01 ][ j0 ] );
+							M2x2.m_matrix[ 1 ][ 1 ] = static_cast< DC >( m_matrix[ j01 ][ j01 ] ) - lambda;
+
+							std::vector< DC > x( this_block_size, DC{} );
+							M2x2.LU_decomposition( true );
+							M2x2.solve_LU( x, b );
+
+							V.m_matrix[ j0 ][ i ] = x[ 0 ];
+							V.m_matrix[ j01 ][ i ] = x[ 1 ];
+						}
+					}
+
 					break;
 				}
 			default:
