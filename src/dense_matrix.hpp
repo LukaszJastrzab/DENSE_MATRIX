@@ -889,10 +889,7 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 			case 1:
 			{
 				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< RT >::epsilon() )
-				{
-					// eigen related to other block seems to be the same as currently considered
-					throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - not yet supported" );
-				}
+					EV.m_matrix[ j0 ][ i ] = val;
 				else
 				{
 					DC b{};
@@ -1058,6 +1055,9 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 				m_matrix[ i ][ i ] += mu;
 		}
 	}
+
+	for( const auto& it : blocks )
+		final_blocks[ it.first ] = it.second;
 
 	QR_get_eigenvalues( l, final_blocks );
 

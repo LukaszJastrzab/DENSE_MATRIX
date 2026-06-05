@@ -29,6 +29,7 @@ protected:
 
 	virtual size_t get_mx_size() { return 50; }
 
+	// common actions before main test
 	void SetUp() override
 	{
 		if( std::is_same_v< real_type< T >::type, double> )
@@ -60,6 +61,7 @@ protected:
 		A_ = A;
 	}
 
+	// common actions after main test
 	void TearDown() override
 	{
 		// get most precise solution
@@ -112,23 +114,21 @@ protected:
 	using RT = typename real_type< T >::type;
 
 	// tested matrix
-	dense_matrix< T > A;
-	dense_matrix< complex< double > > A_, IL;
+	dense_matrix< T > A, A_;
+	dense_matrix< complex< double > > IL;
 
 	// Schur vectors
 	dense_matrix< T > SV, SVT;
 	// eigenvectors
 	dense_matrix< complex< double > > EV;
 
-	// needed vectors
+	// eigen values
 	vector< complex< double > > L;
 
 	double low_val{ 0.01 }, high_val{ 100.0 }, eps{ eps_float };
 
 	// matrix size
 	virtual size_t get_mx_size() { return 10; }
-	// gets desire accuracy
-	virtual RT get_acc() { return  static_cast< RT >( get_mx_size() ) * ( std::is_same_v< RT, float > ? 0.001 : 0.000001 ); }
 	// matrix creation
 	virtual void create_matrix() = 0;
 
@@ -144,10 +144,12 @@ protected:
 
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
-		A_.init( get_mx_size(), get_mx_size() );
 		IL.init( get_mx_size(), get_mx_size() );
 
 		create_matrix();
+
+		// make copy of created matrix
+		A_ = A;
 	}
 
 	// common actions after main test
@@ -179,15 +181,12 @@ protected:
 		{
 			auto val{ static_cast< T >( generate_random< RT >( low_val, high_val ) ) };
 			A.set_element( val, row, row );
-			A_.set_element( static_cast< complex< double > >( val ), row, row );
 
 			for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
 			{
 				auto val{ generate_random< T >( low_val, high_val ) };
 				A.set_element( val, row, col );
 				A.set_element( conjugate( val ), col, row );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-				A_.set_element( static_cast< complex< double > >( conjugate( val ) ), col, row );
 			}
 		}
 	}
@@ -218,12 +217,7 @@ protected:
 	{
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-			{
-				auto val{ generate_random< T >( low_val, high_val ) };
-				A.set_element( val, row, col );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-			}
-
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
 	}
 };
 
@@ -246,17 +240,13 @@ class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 10; }
+	virtual size_t get_mx_size() { return 6; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-			{
-				auto val{ generate_random< T >( low_val, high_val ) };
-				A.set_element( val, row, col );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-			}
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
 	}
 
 };
@@ -264,6 +254,35 @@ protected:
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 
 TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+}
+
+template< typename T >
+class repeated_eigenvalue_problem : public eigenvalues_test< T >
+{
+protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 10; }
+	// matrix creation
+	virtual void create_matrix() override
+	{
+		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+			A.set_element( T{ 1 }, rc, rc );
+
+		auto val{ generate_random< T >( low_val, high_val ) };
+		A.set_element( val, 0, 1 );
+		A.set_element( val, 1, 0 );
+		A.set_element( val, 2, 3 );
+		A.set_element( val, 3, 2 );
+	}
+
+};
+
+TYPED_TEST_SUITE( repeated_eigenvalue_problem, test_types );
+
+TYPED_TEST( repeated_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
 	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
