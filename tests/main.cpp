@@ -162,7 +162,7 @@ protected:
 			IL.set_element( L[ rc ], rc, rc );
 
 		auto eigen_residual_check = A_ * EV - EV * IL;
-		EXPECT_LE( eigen_residual_check.norm_max() / A_.norm_max(), eps );
+		EXPECT_LE( eigen_residual_check.norm_inf() / A_.norm_inf(), eps );
 	}
 };
 
