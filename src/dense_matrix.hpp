@@ -100,12 +100,18 @@ public:
 	/// multiplication operators
 	template< typename U, typename V >
 	friend dense_matrix< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A, const dense_matrix< V >& B );
-	/// multiplication operator
+	/// mult operator that multiply matrix A by vector v
 	template< typename U, typename V >
-	friend dense_matrix< std::common_type_t< U, V > > operator*( const  V& b, const dense_matrix< U >& A );
-	/// mult operator that mutliplise matrix A by vector x
+	friend std::vector< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A, const std::vector< U >& v );
+	/// mult operator that multiply vector v by matrix A
+	template< typename U, typename V >
+	friend std::vector< std::common_type_t< U, V > > operator*( const std::vector< U >& v, const dense_matrix< U >& A );
+	/// mult operator that multiply matrix A by scalar b
 	template< typename U, typename V >
 	friend dense_matrix< std::common_type_t< U, V > > operator*( const V& b, const dense_matrix< U >& A );
+	/// mult operator that multiply matrix A by scalar b
+	template< typename U, typename V >
+	friend dense_matrix< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A, const V& b );
 
 private:
 	/// current state of matrix
@@ -340,17 +346,36 @@ std::vector< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A,
 	if( v.size != A.m_cols )
 		throw std::invalid_argument( "operator* - v.size != A.m_cols" );
 
-	std::vector< std::common_type_t< U, V > > result( A.m_rows, U{} );
+	using R = std::common_type_t< U, V >;
+
+	std::vector< R > result( A.m_rows, R{} );
 
 	for( size_t r{ 0 }; r < A.m_rows; ++r )
 		for( size_t c{ 0 }; c < A.m_cols; ++c )
-			result[ r ] += A.m_matrix[ r ][ c ] * v[ c ];
+			result[ r ] += static_cast< R >( A.m_matrix[ r ][ c ] ) * static_cast< R >( v[ c ] );
 
 	return result;
 }
 
 template< typename U, typename V >
-dense_matrix< std::common_type_t< U, V > > operator*( const  V& b, const dense_matrix< U >& A )
+std::vector< std::common_type_t< U, V > > operator*( const std::vector< U >& v, const dense_matrix< U >& A )
+{
+	if( v.size != A.m_rows )
+		throw std::invalid_argument( "operator* - v.size != A.m_rows" );
+
+	using R = std::common_type_t< U, V >;
+
+	std::vector< R > result( A.m_cols, R{} );
+
+	for( size_t c{ 0 }; c < A.m_cols; ++c )
+		for( size_t r{ 0 }; r < A.m_rows; ++r )
+			result[ c ] += static_cast< R >( v[ r ] ) * static_cast< R >( A.m_matrix[ r ][ c ] );
+
+	return result;
+}
+
+template< typename U, typename V >
+dense_matrix< std::common_type_t< U, V > > operator*( const V& b, const dense_matrix< U >& A )
 {
 	using R = std::common_type_t< U, V >;
 
@@ -358,9 +383,15 @@ dense_matrix< std::common_type_t< U, V > > operator*( const  V& b, const dense_m
 
 	for( size_t r{ 0 }; r < A.m_rows; ++r )
 		for( size_t c{ 0 }; c < A.m_cols; ++c )
-			result.m_matrix[ r ][ c ] = A.m_matrix[ r ][ c ] * b;
+			result.m_matrix[ r ][ c ] = static_cast< R >( A.m_matrix[ r ][ c ] ) * static_cast< R >( b );
 
 	return result;
+}
+
+template< typename U, typename V >
+dense_matrix< std::common_type_t< U, V > > operator*( const dense_matrix< U >& A, const V& b )
+{
+	return b * A;
 }
 
 template < typename T >
