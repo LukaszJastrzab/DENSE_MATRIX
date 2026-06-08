@@ -76,7 +76,8 @@ public:
 	/// decomposes matrix "in situ" to QHQ (using Householder) where H is in Hessenberg form
 	void QHQ_decomposition();
 	/// computes eqigen values using QR algorithm
-	void compute_eigenvalues_QR( std::vector< DC >& l, dense_matrix* SV, dense_matrix< DC >* EV, const size_t max_it = 1000, const bool Francis = true, const double acc = std::numeric_limits< RT >::epsilon() );
+	template< typename C1, typename C2 >
+	void compute_eigenvalues_QR( std::vector< std::complex< C1 > >& l, dense_matrix* SV, dense_matrix< std::complex< C2 > >* EV, const size_t max_it = 1000, const bool Francis = true, const double acc = std::numeric_limits< RT >::epsilon() );
 
 	/// method improves the accuracy of the solution
 	void iterative_refinement( std::vector< DT >& x, const std::vector< DT >& b, const double acc, const size_t max_it, const dense_matrix< T >* A_orig = nullptr ) const;
@@ -157,17 +158,20 @@ private:
 	void count_residual_LUx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	/// method dumps eigen values during QR algorithm
-	void QR_get_eigenvalues( std::vector< DC >& l, std::map< size_t, size_t >& final_blocks );
+	template< typename C1 >
+	void QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks );
 	/// method used buble racing in QR algorithm for eigenvalues problem
 	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, dense_matrix* V, std::vector< T > v = {} );
 	/// method returns Francis step column
 	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
 	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
-	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< DC >& l );
+	template< typename C1 >
+	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l );
 	/// method used for creation of Schur vectors during QR algorithm
 	void apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T >* v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
 	/// computes eigen vectors from given SCHUR_FORM matrix, Schur vectors and eigen values ( used in QR algorithm)
-	void compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix< T >& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const;
+	template< typename C1, typename C2 >
+	void compute_eigenvectors( dense_matrix< std::complex< C2 > >& EV, const dense_matrix< T >& SV, const std::vector< std::complex< C1 > >& l, const std::map< size_t, size_t >& blocks ) const;
 };
 
 template< typename T >
@@ -692,23 +696,29 @@ void dense_matrix< T >::QHQ_decomposition()
 
 
 template< typename T >
-void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::vector< DC >& l )
+template< typename C1 >
+void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l )
 {
-	DC a{ m_matrix[ shift ][ shift ] }, b{ m_matrix[ shift ][ shift + 1 ] },
+	using CT = std::complex< C1 >;
+
+	CT a{ m_matrix[ shift ][ shift ] }, b{ m_matrix[ shift ][ shift + 1 ] },
 		c{ m_matrix[ shift + 1 ][ shift ] }, d{ m_matrix[ shift + 1 ][ shift + 1 ] };
 
-	DC tr{ a + d };
-	DC det{ a * d - b * c };
-	DC disc{ std::sqrt( tr * tr - DC( 4.0 ) * det ) };
+	CT tr{ a + d };
+	CT det{ a * d - b * c };
+	CT disc{ std::sqrt( tr * tr - static_cast< CT >( 4.0 ) * det ) };
 
-	l[ shift ] = ( tr + disc ) / DC( 2.0 );
-	l[ shift + 1 ] = ( tr - disc ) / DC( 2.0 );
+	l[ shift ] = ( tr + disc ) / CT( 2.0 );
+	l[ shift + 1 ] = ( tr - disc ) / CT( 2.0 );
 }
 
 
 template< typename T >
-void dense_matrix< T >::QR_get_eigenvalues( std::vector< DC >& l, std::map< size_t, size_t >& final_blocks )
+template < typename C1 >
+void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks )
 {
+	using CT = std::complex< C1 >;
+
 	for( const auto [block_begin, block_end] : final_blocks )
 	{
 		switch( block_end - block_begin )
@@ -718,7 +728,7 @@ void dense_matrix< T >::QR_get_eigenvalues( std::vector< DC >& l, std::map< size
 			break;
 
 		case 1:
-			l[ block_begin ] = DC( m_matrix[ block_begin ][ block_begin ] );
+			l[ block_begin ] = static_cast< CT >( m_matrix[ block_begin ][ block_begin ] );
 			break;
 
 		default:
@@ -866,11 +876,14 @@ void dense_matrix< T >::apply_VQ_step( dense_matrix& SV, const size_t row_shift,
 }
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix< T >& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const
+template< typename C1, typename C2 >
+void dense_matrix< T >::compute_eigenvectors( dense_matrix< std::complex< C2 > >& EV, const dense_matrix< T >& SV, const std::vector< std::complex< C1 > >& l, const std::map< size_t, size_t >& blocks ) const
 {
+	using CT2 = std::complex< C2 >;
+
 	EV.init( m_rows, m_cols );
 
-	const DC val{ 1 };
+	const CT2 val{ 1 };
 
 	for( size_t i{ 0 }; i < l.size(); ++i )
 	{
@@ -891,11 +904,11 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 			break;
 		case 2:
 		{
-			const auto mi0{ static_cast< DC >( m_matrix[ i0 ][ i0 ] ) - lambda };
-			const auto mi1{ static_cast< DC >( m_matrix[ i01 ][ i01 ] ) - lambda };
+			const auto mi0{ static_cast< CT2 >( m_matrix[ i0 ][ i0 ] ) - static_cast< CT2 >( lambda ) };
+			const auto mi1{ static_cast< CT2 >( m_matrix[ i01 ][ i01 ] ) - static_cast< CT2 >( lambda ) };
 			EV.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i01 ][ i0 ] ) ?
-											  static_cast< DC >( m_matrix[ i0 ][ i01 ] ) / mi0 :
-											  mi1 / static_cast< DC >( m_matrix[ i01 ][ i0 ] ) );
+											  static_cast< CT2 >( m_matrix[ i0 ][ i01 ] ) / mi0 :
+											  mi1 / static_cast< CT2 >( m_matrix[ i01 ][ i0 ] ) );
 			EV.m_matrix[ i01 ][ i ] = val;
 			break;
 		}
@@ -914,27 +927,27 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 			{
 			case 1:
 			{
-				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< RT >::epsilon() )
+				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< C1 >::epsilon() )
 					EV.m_matrix[ j0 ][ i ] = val;
 				else
 				{
-					DC b{};
+					CT2 b{};
 					for( size_t j{ j1 }; j < i1; ++j )
-						b -= static_cast< DC >( m_matrix[ j0 ][ j ] ) * EV.m_matrix[ j ][ i ];
-					EV.m_matrix[ j0 ][ i ] = b / ( static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda );
+						b -= static_cast< CT2 >( m_matrix[ j0 ][ j ] ) * EV.m_matrix[ j ][ i ];
+					EV.m_matrix[ j0 ][ i ] = b / ( static_cast< CT2 >( m_matrix[ j0 ][ j0 ] ) - static_cast< CT2 >( lambda ) );
 				}
 				break;
 			}
 			case 2:
 			{
-				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< RT >::epsilon() ||
-					abs_val( lambda - l[ j01 ] ) <= std::numeric_limits< RT >::epsilon() )
+				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< C1 >::epsilon() ||
+					abs_val( lambda - l[ j01 ] ) <= std::numeric_limits< C1 >::epsilon() )
 				{
-					const auto mj0{ static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda };
-					const auto mj1{ static_cast< DC >( m_matrix[ j01 ][ j01 ] ) - lambda };
+					const auto mj0{ static_cast< CT2 >( m_matrix[ j0 ][ j0 ] ) - static_cast< CT2 >( lambda ) };
+					const auto mj1{ static_cast< CT2 >( m_matrix[ j01 ][ j01 ] ) - static_cast< CT2 >( lambda ) };
 					EV.m_matrix[ j0 ][ i ] = -val * ( abs_val( mj0 ) > abs_val( m_matrix[ j01 ][ j0 ] ) ?
-						                              static_cast< DC >( m_matrix[ j0 ][ j01 ] ) / mj0 :
-						                              mj1 / static_cast< DC >( m_matrix[ j01 ][ j0 ] ) );
+						                              static_cast< CT2 >( m_matrix[ j0 ][ j01 ] ) / mj0 :
+						                              mj1 / static_cast< CT2 >( m_matrix[ j01 ][ j0 ] ) );
 					EV.m_matrix[ j01 ][ i ] = val;
 					break;
 				}
@@ -945,20 +958,20 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 					{
 						const size_t row{ j0 + r };
 						for( size_t j{ j1 }; j < i1; ++j )
-							b[ r ] -= static_cast< DC >( m_matrix[ row ][ j ] ) * EV.m_matrix[ j ][ i ];
+							b[ r ] -= static_cast< DC >( m_matrix[ row ][ j ] ) * static_cast< DC >( EV.m_matrix[ j ][ i ] );
 
 						dense_matrix< DC > M2x2( this_block_size, this_block_size );
-						M2x2.m_matrix[ 0 ][ 0 ] = static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda;
+						M2x2.m_matrix[ 0 ][ 0 ] = static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - static_cast< DC >( lambda );
 						M2x2.m_matrix[ 0 ][ 1 ] = static_cast< DC >( m_matrix[ j0 ][ j01 ] );
 						M2x2.m_matrix[ 1 ][ 0 ] = static_cast< DC >( m_matrix[ j01 ][ j0 ] );
-						M2x2.m_matrix[ 1 ][ 1 ] = static_cast< DC >( m_matrix[ j01 ][ j01 ] ) - lambda;
+						M2x2.m_matrix[ 1 ][ 1 ] = static_cast< DC >( m_matrix[ j01 ][ j01 ] ) - static_cast< DC >( lambda );
 
 						std::vector< DC > x( this_block_size, DC{} );
 						M2x2.LU_decomposition( true );
 						M2x2.solve_LU( x, b );
 
-						EV.m_matrix[ j0 ][ i ] = x[ 0 ];
-						EV.m_matrix[ j01 ][ i ] = x[ 1 ];
+						EV.m_matrix[ j0 ][ i ] = static_cast< CT2 >( x[ 0 ] );
+						EV.m_matrix[ j01 ][ i ] = static_cast< CT2 >( x[ 1 ] );
 					}
 				}
 
@@ -976,7 +989,8 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 }
 
 template< typename T >
-void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matrix* SV, dense_matrix< DC >* EV, const size_t max_it, const bool Francis, const double acc )
+template< typename C1, typename C2 >
+void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< C1 > >& l, dense_matrix* SV, dense_matrix< std::complex< C2 > >* EV, const size_t max_it, const bool Francis, const double acc )
 {
 	if( m_rows != m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_rows != m_cols" );
@@ -985,8 +999,10 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 	if( m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED )
 		throw std::invalid_argument( "dense_matrix< T >::compute_eigenvalues_QR - m_dynamic_state != DYNAMIC_STATE::QHQ_DECOMPOSED" );
 
+	using CT1 = std::complex< C1 >;
+
 	auto block_size = Francis ? 3ull : 2ull;
-	l.resize( m_rows, DC{} );
+	l.resize( m_rows, CT1{} );
 	dense_matrix< T > SV_alloc;
 
 	// if only eigenvalues are needed then allocate Schur's only temporary ( as they are needed wnyway )

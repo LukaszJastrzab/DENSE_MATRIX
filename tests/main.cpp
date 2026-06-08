@@ -115,15 +115,15 @@ protected:
 
 	// tested matrix
 	dense_matrix< T > A, A_;
-	dense_matrix< complex< double > > IL;
+	dense_matrix< complex< RT > > IL;
 
 	// Schur vectors
 	dense_matrix< T > SV, SVT;
 	// eigenvectors
-	dense_matrix< complex< double > > EV;
+	dense_matrix< complex< RT > > EV;
 
 	// eigen values
-	vector< complex< double > > L;
+	vector< complex< RT > > L;
 
 	double low_val{ 0.01 }, high_val{ 100.0 }, eps{ eps_float };
 
