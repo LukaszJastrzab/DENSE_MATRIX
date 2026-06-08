@@ -173,7 +173,7 @@ class hermitian_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 10; }
+	virtual size_t get_mx_size() { return 30; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -211,7 +211,7 @@ class complex_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 10; }
+	virtual size_t get_mx_size() { return 20; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -240,7 +240,7 @@ class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 6; }
+	virtual size_t get_mx_size() { return 20; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -264,7 +264,7 @@ class repeated_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
 	// matrix size
-	virtual size_t get_mx_size() { return 10; }
+	virtual size_t get_mx_size() { return 20; }
 	// matrix creation
 	virtual void create_matrix() override
 	{

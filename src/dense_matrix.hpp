@@ -868,8 +868,8 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 			const auto mi0{ static_cast< DC >( m_matrix[ i0 ][ i0 ] ) - lambda };
 			const auto mi1{ static_cast< DC >( m_matrix[ i01 ][ i01 ] ) - lambda };
 			EV.m_matrix[ i0 ][ i ] = -val * ( abs_val( mi0 ) > abs_val( m_matrix[ i01 ][ i0 ] ) ?
-				static_cast< DC >( m_matrix[ i0 ][ i01 ] ) / mi0 :
-				mi1 / static_cast< DC >( m_matrix[ i01 ][ i0 ] ) );
+											  static_cast< DC >( m_matrix[ i0 ][ i01 ] ) / mi0 :
+											  mi1 / static_cast< DC >( m_matrix[ i01 ][ i0 ] ) );
 			EV.m_matrix[ i01 ][ i ] = val;
 			break;
 		}
@@ -904,8 +904,13 @@ void dense_matrix< T >::compute_eigenvectors( dense_matrix< DC >& EV, const dens
 				if( abs_val( lambda - l[ j0 ] ) <= std::numeric_limits< RT >::epsilon() ||
 					abs_val( lambda - l[ j01 ] ) <= std::numeric_limits< RT >::epsilon() )
 				{
-					// eigen related to other block seems to be the same as currently considered
-					throw std::runtime_error( "dense_matrix< T >::compute_eigenvectors - not yet supported" );
+					const auto mj0{ static_cast< DC >( m_matrix[ j0 ][ j0 ] ) - lambda };
+					const auto mj1{ static_cast< DC >( m_matrix[ j01 ][ j01 ] ) - lambda };
+					EV.m_matrix[ j0 ][ i ] = -val * ( abs_val( mj0 ) > abs_val( m_matrix[ j01 ][ j0 ] ) ?
+						                              static_cast< DC >( m_matrix[ j0 ][ j01 ] ) / mj0 :
+						                              mj1 / static_cast< DC >( m_matrix[ j01 ][ j0 ] ) );
+					EV.m_matrix[ j01 ][ i ] = val;
+					break;
 				}
 				else
 				{
@@ -982,6 +987,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 			m_matrix[ r ][ c ] = T{};
 
 	std::map< size_t, size_t > blocks, final_blocks;
+	std::map< size_t, double > b2x2_deflacc;
 
 	blocks[ 0 ] = m_rows;
 
@@ -994,11 +1000,8 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 			for( auto i{ block_begin }; i < block_end - 1; ++i )
 			{
 				auto ii{ i + 1 };
-				const double a{ abs_val( m_matrix[ i ][ i ] ) },
-					b{ abs_val( m_matrix[ ii ][ ii ] ) },
-					c{ abs_val( m_matrix[ ii ][ i ] ) };
 
-				if( c <= acc * ( a + b ) )
+				if( abs_val( m_matrix[ ii ][ i ] ) <= acc * ( abs_val( m_matrix[ i ][ i ] ) + abs_val( m_matrix[ ii ][ ii ] ) ) )
 				{
 					m_matrix[ ii ][ i ] = T{};
 					blocks[ ii ] = block_end;
@@ -1012,13 +1015,25 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 		// =======================================================================
 		for( auto it = blocks.begin(); it != blocks.end(); )
 		{
-			const auto i0{ it->first }, i1{ it->second };
+			const auto i0{ it->first }, i01{ it->first + 1 }, i1{ it->second };
 			const auto b_size{ i1 - i0 };
+			bool remove2x2{ false };
 
 			if( b_size == 2 )
-				QR_get_eigenvalues_from_block( i0, l );
+			{
+				auto ndefacc{ abs_val( m_matrix[ i01 ][ i0 ] ) };
+				auto defacc = b2x2_deflacc.find( i0 );
 
-			if( b_size == 1 || ( b_size == 2 && l[ i0 ].imag() != 0 && l[ i0 ] == conjugate( l[ i0 + 1 ] ) ) )
+				if( defacc == b2x2_deflacc.end() )
+					b2x2_deflacc[ i0 ] = ndefacc;
+				else if( ndefacc >= defacc->second )
+				{
+					remove2x2 = true;
+					b2x2_deflacc.erase( defacc );
+				}
+			}
+
+			if( b_size == 1 || remove2x2 )
 			{
 				final_blocks[ i0 ] = i1;
 				it = blocks.erase( it );
