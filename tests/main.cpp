@@ -29,6 +29,7 @@ protected:
 
 	virtual size_t get_mx_size() { return 50; }
 
+	// common actions before main test
 	void SetUp() override
 	{
 		if( std::is_same_v< real_type< T >::type, double> )
@@ -60,6 +61,7 @@ protected:
 		A_ = A;
 	}
 
+	// common actions after main test
 	void TearDown() override
 	{
 		// get most precise solution
@@ -112,60 +114,57 @@ protected:
 	using RT = typename real_type< T >::type;
 
 	// tested matrix
-	dense_matrix< T > A;
-	dense_matrix< complex< double > > A_, IL;
+	dense_matrix< T > A, A_;
+	dense_matrix< complex< double > > IL;
 
-	// needed vectors
-	vector< DT > b, x, r;
+	// Schur vectors
+	dense_matrix< T > SV, SVT;
+	// eigenvectors
+	dense_matrix< complex< double > > EV;
+
+	// eigen values
 	vector< complex< double > > L;
 
-	double low_val{ 0.01 }, high_val{ 100.0 };
+	double low_val{ 0.01 }, high_val{ 100.0 }, eps{ eps_float };
 
 	// matrix size
 	virtual size_t get_mx_size() { return 10; }
-	// gets desire accuracy
-	virtual RT get_acc() { return  static_cast< RT >( get_mx_size() ) * ( std::is_same_v< RT, float > ? 0.001 : 0.000001 ); }
 	// matrix creation
 	virtual void create_matrix() = 0;
-	// decomposition for sinularity verification
-	virtual void singularity_verification( dense_matrix< complex< double > >& A_IL )
-	{
-		EXPECT_THROW( A_IL.LU_decomposition( true, 0, get_acc() ), singularity_error );
-	}
 
-
+	// common actions before main test
 	void SetUp() override
 	{
 		if( std::is_same_v< real_type< T >::type, double > )
 		{
 			low_val = 0.001;
 			high_val = 1000.0;
+			eps = eps_double;
 		}
 
 		// tested matrix
 		A.init( get_mx_size(), get_mx_size() );
-		A_.init( get_mx_size(), get_mx_size() );
 		IL.init( get_mx_size(), get_mx_size() );
 
 		create_matrix();
+
+		// make copy of created matrix
+		A_ = A;
 	}
 
+	// common actions after main test
 	void TearDown() override
 	{
-		// verification each computed eigen value 
-		// if "l" is an eigen value then matrix (A - Il) is singular
-		// so LU_decomposition should throw runtime error "obtained singular matrix"
-		// =========================================================================
-		for( size_t i{ 0 }; i < get_mx_size(); ++i )
-		{
-			for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
-				IL.set_element( L[ i ], rc, rc );
+		SVT = SV;
+		SVT.hermitian_transpose();
+		auto schur_residual_check = A_ - SV * A * SVT;
+		EXPECT_LE( schur_residual_check.norm_max() / A_.norm_max(), eps );
 
-			// if L is an eigenvalue of A (=A_) then matrix: A - IL should be singular
-			// =======================================================================
-			auto A_IL{ A_ - IL };
-			singularity_verification( A_IL );
-		}
+		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+			IL.set_element( L[ rc ], rc, rc );
+
+		auto eigen_residual_check = A_ * EV - EV * IL;
+		EXPECT_LE( eigen_residual_check.norm_inf() / A_.norm_inf(), eps );
 	}
 };
 
@@ -173,6 +172,8 @@ template< typename T >
 class hermitian_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 30; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
@@ -180,15 +181,12 @@ protected:
 		{
 			auto val{ static_cast< T >( generate_random< RT >( low_val, high_val ) ) };
 			A.set_element( val, row, row );
-			A_.set_element( static_cast< complex< double > >( val ), row, row );
 
 			for( size_t col{ row + 1 }; col < get_mx_size(); ++col )
 			{
 				auto val{ generate_random< T >( low_val, high_val ) };
 				A.set_element( val, row, col );
 				A.set_element( conjugate( val ), col, row );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-				A_.set_element( static_cast< complex< double > >( conjugate( val ) ), col, row );
 			}
 		}
 	}
@@ -199,29 +197,27 @@ TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, false ) );
 }
 
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
 }
 
 template< typename T >
 class complex_eigenvalue_problem : public eigenvalues_test< T >
 {
+protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 20; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-			{
-				auto val{ generate_random< T >( low_val, high_val ) };
-				A.set_element( val, row, col );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-			}
-
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
 	}
 };
 
@@ -230,30 +226,29 @@ TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, false ) );
 }
 
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
 }
 
 template< typename T >
 class general_eigenvalue_problem : public eigenvalues_test< T >
 {
 protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 20; }
 	// matrix creation
 	virtual void create_matrix() override
 	{
 		for( size_t row{ 0 }; row < get_mx_size(); ++row )
 			for( size_t col{ 0 }; col < get_mx_size(); ++col )
-			{
-				auto val{ generate_random< T >( low_val, high_val ) };
-				A.set_element( val, row, col );
-				A_.set_element( static_cast< complex< double > >( val ), row, col );
-			}
+				A.set_element( generate_random< T >( low_val, high_val ), row, col );
 	}
+
 };
 
 TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
@@ -261,5 +256,34 @@ TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+}
+
+template< typename T >
+class repeated_eigenvalue_problem : public eigenvalues_test< T >
+{
+protected:
+	// matrix size
+	virtual size_t get_mx_size() { return 20; }
+	// matrix creation
+	virtual void create_matrix() override
+	{
+		for( size_t rc{ 0 }; rc < get_mx_size(); ++rc )
+			A.set_element( T{ 1 }, rc, rc );
+
+		auto val{ generate_random< T >( low_val, high_val ) };
+		A.set_element( val, 0, 1 );
+		A.set_element( val, 1, 0 );
+		A.set_element( val, 2, 3 );
+		A.set_element( val, 3, 2 );
+	}
+
+};
+
+TYPED_TEST_SUITE( repeated_eigenvalue_problem, test_types );
+
+TYPED_TEST( repeated_eigenvalue_problem, QR_algorithm_Francis_ON )
+{
+	// compute eigen values for matrix A
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
 }
