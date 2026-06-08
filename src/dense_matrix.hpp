@@ -18,7 +18,7 @@ enum class DYNAMIC_STATE : int
 	LU_DECOMPOSED,
 	QR_DECOMPOSED,
 	QHQ_DECOMPOSED,
-	QUASI_QR,
+	SCHUR_FORM,
 	SCHUR_VECTORS,
 	EIGEN_VECTORS
 };
@@ -160,7 +160,7 @@ private:
 	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< DC >& l );
 	/// method used for creation of Schur vectors during QR algorithm
 	void apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T >* v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
-	/// computes eigen vectors from given, QUASI_QR matrix, Schur vectors and eigen values ( used in QR algorithm)
+	/// computes eigen vectors from given SCHUR_FORM matrix, Schur vectors and eigen values ( used in QR algorithm)
 	void compute_eigenvectors( dense_matrix< DC >& EV, const dense_matrix< T >& SV, const std::vector< DC >& l, const std::map< size_t, size_t >& blocks ) const;
 
 	/// test methods
@@ -1082,7 +1082,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< DC >& l, dense_matr
 	if( SV != nullptr && EV != nullptr )
 		compute_eigenvectors( *EV, *SV, l, final_blocks );
 
-	m_dynamic_state = DYNAMIC_STATE::QUASI_QR;
+	m_dynamic_state = DYNAMIC_STATE::SCHUR_FORM;
 }
 
 
