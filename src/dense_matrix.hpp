@@ -159,16 +159,16 @@ private:
 	void count_residual_QRx_b( const std::vector< DT >& x, const std::vector< DT >& b, std::vector< DT >& r ) const;
 	/// method dumps eigen values during QR algorithm
 	template< typename C1 >
-	void QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks );
+	void QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks ) const;
 	/// method used buble racing in QR algorithm for eigenvalues problem
 	bool QHQ_NxN_with_shifts( const size_t row_shift, const size_t col_shift, const size_t block_end, size_t block_size, dense_matrix* V, std::vector< T > v = {} );
 	/// method returns Francis step column
-	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end );
+	std::vector< T > get_Francis_v( const size_t shift, const size_t block_end ) const;
 	/// method used in QR alogoritm, it gets eigenvalues from 2x2 Shur block
 	template< typename C1 >
-	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l );
+	void QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l ) const;
 	/// method used for creation of Schur vectors during QR algorithm
-	void apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T >* v, T beta, size_t block_end = std::numeric_limits< size_t >::max() );
+	void apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, const size_t col_len, std::vector< T >* v, T beta, size_t block_end = std::numeric_limits< size_t >::max() ) const;
 	/// computes eigen vectors from given SCHUR_FORM matrix, Schur vectors and eigen values ( used in QR algorithm)
 	template< typename C1, typename C2 >
 	void compute_eigenvectors( dense_matrix< std::complex< C2 > >& EV, const dense_matrix< T >& SV, const std::vector< std::complex< C1 > >& l, const std::map< size_t, size_t >& blocks ) const;
@@ -236,7 +236,7 @@ void dense_matrix< T >::transpose()
 			t_matrix[ c ][ r ] = m_matrix[ r ][ c ];
 
 	std::swap( m_rows, m_cols );
-	std::swap( m_p_row, m_p_row );
+	std::swap( m_p_row, m_p_col );
 
 	m_matrix = std::move( t_matrix );
 }
@@ -296,7 +296,7 @@ dense_matrix< std::common_type_t< U, V > > operator+( const dense_matrix< U >& A
 
 	using R = std::common_type_t< U, V >;
 
-	dense_matrix< R > result( A.m_rows, B.m_cols );
+	dense_matrix< R > result( A.m_rows, A.m_cols );
 
 	for( size_t r{ 0 }; r < A.m_rows; ++r )
 		for( size_t c{ 0 }; c < A.m_cols; ++c )
@@ -313,7 +313,7 @@ dense_matrix< std::common_type_t< U, V > > operator-( const dense_matrix< U >& A
 
 	using R = std::common_type_t< U, V >;
 
-	dense_matrix< R > result( A.m_rows, B.m_cols );
+	dense_matrix< R > result( A.m_rows, A.m_cols );
 
 	for( size_t r{ 0 }; r < A.m_rows; ++r )
 		for( size_t c{ 0 }; c < A.m_cols; ++c )
@@ -697,7 +697,7 @@ void dense_matrix< T >::QHQ_decomposition()
 
 template< typename T >
 template< typename C1 >
-void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l )
+void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::vector< std::complex< C1 > >& l ) const
 {
 	using CT = std::complex< C1 >;
 
@@ -715,7 +715,7 @@ void dense_matrix< T >::QR_get_eigenvalues_from_block( const size_t shift, std::
 
 template< typename T >
 template < typename C1 >
-void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks )
+void dense_matrix< T >::QR_get_eigenvalues( std::vector< std::complex< C1 > >& l, std::map< size_t, size_t >& final_blocks ) const
 {
 	using CT = std::complex< C1 >;
 
@@ -819,7 +819,7 @@ bool dense_matrix< T >::QHQ_NxN_with_shifts( const size_t row_shift, const size_
 }
 
 template< typename T >
-std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const size_t block_end )
+std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const size_t block_end ) const
 {
 	const T a{ m_matrix[ block_end - 1 ][ block_end - 1 ] },
 		b{ m_matrix[ block_end - 1 ][ block_end ] },
@@ -841,7 +841,7 @@ std::vector< T > dense_matrix< T >::get_Francis_v( const size_t shift, const siz
 }
 
 template< typename T >
-void dense_matrix< T >::apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, size_t col_len, std::vector< T >* v, T beta, size_t block_end )
+void dense_matrix< T >::apply_VQ_step( dense_matrix& SV, const size_t row_shift, const size_t col_shift, size_t col_len, std::vector< T >* v, T beta, size_t block_end ) const
 {
 	if( m_rows != SV.m_rows || m_cols != SV.m_cols )
 		throw std::invalid_argument( "dense_matrix< T >::apply_VQ_step - m_rows != SV.m_rows || m_cols != SV.m_cols" );
