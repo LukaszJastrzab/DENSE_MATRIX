@@ -8,6 +8,8 @@
 
 #include <utilities.cuh>
 
+namespace dm
+{
 
 // Type definition for state of dense_matrix
 // =========================================
@@ -1473,4 +1475,6 @@ void dense_matrix< T >::cols_scaling()
 		for( size_t row{ 0 }; row < m_rows; ++row )
 			m_matrix[ row ][ col ] *= static_cast< T >( m_scalars[ col ] );
 	}
+}
+
 }

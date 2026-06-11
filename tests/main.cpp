@@ -4,6 +4,7 @@
 #include <functions.hpp>
 
 using namespace std;
+using namespace dm;
 
 constexpr double eps_float{ 1e-4 };
 constexpr double eps_double{ 1e-10 };
