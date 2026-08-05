@@ -42,6 +42,8 @@ public:
 	~dense_matrix() = default;
 	/// assign operator of the same type T
 	dense_matrix& operator=( const dense_matrix& ) = default;
+	/// assign move operator of the same type T
+	dense_matrix& operator=( dense_matrix&& ) = default;
 
 	/// double type used by this template
 	using DT = typename double_type< T >::type;
