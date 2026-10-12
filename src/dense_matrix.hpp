@@ -1037,7 +1037,7 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< C1 > 
 
 	blocks[ 0 ] = m_rows;
 
-	for( size_t iter{ 0 }; iter < max_it; ++iter )
+	for( size_t iter{ 0 }; iter < max_it || max_it == 0; ++iter )
 	{
 		// deflection
 		// ==========
@@ -1077,6 +1077,8 @@ void dense_matrix< T >::compute_eigenvalues_QR( std::vector< std::complex< C1 > 
 					remove2x2 = true;
 					b2x2_deflacc.erase( defacc );
 				}
+				else
+					b2x2_deflacc[ i0 ] = ndefacc;
 			}
 
 			if( b_size == 1 || remove2x2 )

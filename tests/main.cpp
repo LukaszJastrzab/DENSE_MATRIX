@@ -198,13 +198,13 @@ TYPED_TEST_SUITE( hermitian_eigenvalue_problem, test_types );
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, false ) );
 }
 
 TYPED_TEST( hermitian_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, true ) );
 }
 
 template< typename T >
@@ -227,13 +227,13 @@ TYPED_TEST_SUITE( complex_eigenvalue_problem, test_complex_types );
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_OFF )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, false ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, false ) );
 }
 
 TYPED_TEST( complex_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, true ) );
 }
 
 template< typename T >
@@ -257,7 +257,7 @@ TYPED_TEST_SUITE( general_eigenvalue_problem, test_types );
 TYPED_TEST( general_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, true ) );
 }
 
 template< typename T >
@@ -286,5 +286,5 @@ TYPED_TEST_SUITE( repeated_eigenvalue_problem, test_types );
 TYPED_TEST( repeated_eigenvalue_problem, QR_algorithm_Francis_ON )
 {
 	// compute eigen values for matrix A
-	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 100, true ) );
+	EXPECT_NO_THROW( A.compute_eigenvalues_QR( L, &SV, &EV, 0, true ) );
 }
